@@ -1,0 +1,128 @@
+{{- if .Values.cleanup.enabled -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "filesender.fullname" . }}-cleanup
+  labels:
+    {{- include "filesender.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cleanup.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "filesender.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: cleanup
+        spec:
+          restartPolicy: OnFailure
+          {{- if .Values.persistence.enabled }}
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      {{- include "filesender.selectorLabels" . | nindent 22 }}
+                  topologyKey: kubernetes.io/hostname
+          {{- end }}
+          containers:
+            - name: cleanup
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - /bin/sh
+                - -c
+                - php /opt/filesender/filesender/scripts/task/cron.php
+              env:
+                {{- if .Values.postgresql.external.enabled }}
+                {{- if .Values.postgresql.external.existingSecret }}
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.postgresql.external.existingSecret }}
+                      key: {{ .Values.postgresql.external.secretKey }}
+                {{- else }}
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "filesender.fullname" . }}
+                      key: postgres-external-password
+                {{- end }}
+                {{- else if .Values.postgresql.internal.enabled }}
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "filesender.fullname" . }}
+                      key: postgres-password
+                {{- end }}
+                
+                {{- if .Values.filesender.mail.enabled }}
+                - name: GRAPH_TENANT_ID
+                  value: {{ .Values.simplesamlphp.saml.entra.tenantId | quote }}
+                - name: GRAPH_CLIENT_ID
+                  value: {{ .Values.simplesamlphp.saml.entra.applicationId | quote }}
+                - name: GRAPH_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      {{- if .Values.filesender.mail.existingSecret }}
+                      name: {{ .Values.filesender.mail.existingSecret }}
+                      key: {{ .Values.filesender.mail.existingSecretKey }}
+                      {{- else }}
+                      name: {{ include "filesender.fullname" . }}
+                      key: graph-client-secret
+                      {{- end }}
+                - name: GRAPH_FROM_ADDRESS
+                  value: {{ .Values.filesender.mail.fromAddress | quote }}
+                {{- if .Values.filesender.mail.sendOnBehalfOf }}
+                - name: GRAPH_SEND_ON_BEHALF_OF
+                  value: "true"
+                {{- end }}
+                {{- end }}
+                
+                {{- if eq .Values.filesender.storage.type "CloudS3" }}
+                - name: S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      {{- if .Values.filesender.storage.s3.existingSecret }}
+                      name: {{ .Values.filesender.storage.s3.existingSecret }}
+                      key: {{ .Values.filesender.storage.s3.existingSecretKeyAccessKey }}
+                      {{- else }}
+                      name: {{ include "filesender.fullname" . }}
+                      key: s3-access-key
+                      {{- end }}
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      {{- if .Values.filesender.storage.s3.existingSecret }}
+                      name: {{ .Values.filesender.storage.s3.existingSecret }}
+                      key: {{ .Values.filesender.storage.s3.existingSecretKeySecretKey }}
+                      {{- else }}
+                      name: {{ include "filesender.fullname" . }}
+                      key: s3-secret-key
+                      {{- end }}
+                {{- end }}
+              volumeMounts:
+                - name: filesender-config
+                  mountPath: /opt/filesender/filesender/config/config.php
+                  subPath: config.php
+                {{- if eq .Values.filesender.storage.type "CloudS3" }}
+                - name: filesender-config
+                  mountPath: /opt/filesender/filesender/config/config_private.php
+                  subPath: config_private.php
+                {{- end }}
+                {{- if .Values.persistence.enabled }}
+                - name: filesender-data
+                  mountPath: {{ .Values.filesender.storage.path }}
+                {{- end }}
+          volumes:
+            - name: filesender-config
+              configMap:
+                name: {{ include "filesender.fullname" . }}-filesender
+            {{- if .Values.persistence.enabled }}
+            - name: filesender-data
+              persistentVolumeClaim:
+                claimName: {{ include "filesender.fullname" . }}-data
+            {{- end }}
+{{- end }}
