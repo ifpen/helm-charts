@@ -49,7 +49,7 @@ Erreurs 404 lors de la connexion SAML:
 Dans la configuration nginx (`docker/filesender/default.conf`), le paramètre `SCRIPT_FILENAME` utilisait la variable `$document_root` qui pointait vers `/opt/filesender/filesender/www` (défini dans le bloc server principal).
 
 Lorsque nginx utilise la directive `alias`, `$document_root` ne change pas automatiquement. Cela causait la construction d'un chemin incorrect:
-- Attendu: `/opt/filesender/simplesaml/www/module.php`
+- Attendu: `/opt/filesender/simplesaml/public/module.php`
 - Obtenu: `/opt/filesender/filesender/www/module.php` (fichier inexistant → 404)
 
 ### Solution appliquée
@@ -58,7 +58,7 @@ Lorsque nginx utilise la directive `alias`, `$document_root` ne change pas autom
 **Avant:**
 ```nginx
 location ^~ /simplesaml {
-    alias /opt/filesender/simplesaml/www;
+    alias /opt/filesender/simplesaml/public;
     location ~ ^(?<prefix>/simplesaml)(?<phpfile>.+?\.php)(?<pathinfo>/.*)?$ {
         fastcgi_param SCRIPT_FILENAME $document_root$phpfile;
         ...
@@ -69,9 +69,9 @@ location ^~ /simplesaml {
 **Après:**
 ```nginx
 location ^~ /simplesaml {
-    alias /opt/filesender/simplesaml/www;
+    alias /opt/filesender/simplesaml/public;
     location ~ ^(?<prefix>/simplesaml)(?<phpfile>.+?\.php)(?<pathinfo>/.*)?$ {
-        fastcgi_param SCRIPT_FILENAME /opt/filesender/simplesaml/www$phpfile;
+        fastcgi_param SCRIPT_FILENAME /opt/filesender/simplesaml/public$phpfile;
         ...
     }
 }

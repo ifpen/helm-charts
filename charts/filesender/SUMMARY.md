@@ -3,7 +3,7 @@
 ## ✅ Tâches accomplies
 
 ### 1. Dockerfile moderne
-- ✅ Image de base: `php:8.2-fpm-alpine`
+- ✅ Image de base: `php:8.5-fpm-alpine`
 - ✅ FileSender 3.5 depuis la branche master3
 - ✅ SimpleSAMLphp 2.2.3 intégré
 - ✅ Nginx 1.25-alpine intégré dans la même image
@@ -175,7 +175,7 @@ docker/filesender/
 
 | Aspect | Ancien | Nouveau |
 |--------|--------|---------|
-| Image de base | `dhi.io/php:8.5.0-fpm` | `php:8.2-fpm-alpine` |
+| Image de base | `dhi.io/php:8.5.0-fpm` | `php:8.5-fpm-alpine` |
 | Architecture | PHP-FPM seul (port 9000) | Nginx + PHP-FPM (port 80) |
 | PostgreSQL | Non intégré | Externe OU interne |
 | SimpleSAMLphp | Config manuelle | Configuré via values.yaml |
