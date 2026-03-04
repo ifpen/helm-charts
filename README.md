@@ -7,7 +7,7 @@ Collection de charts Helm pour Kubernetes, maintenus par [ifpen](https://github.
 <!-- CHART-TABLE-START -->
 | Chart | Version | Description |
 |-------|---------|-------------|
-| [filesender](charts/filesender/) | 3.5.2 | FileSender v3.5 - Application web open-source de partage de fichiers volumineux avec SimpleSAMLphp et Nginx intégrés |
+| [filesender](charts/filesender/) | 3.5.3 | FileSender v3.5 - Application web open-source de partage de fichiers volumineux avec SimpleSAMLphp et Nginx intégrés |
 <!-- CHART-TABLE-END -->
 
 Consultez le README de chaque chart pour la documentation complète et les options de configuration.
