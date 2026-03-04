@@ -34,7 +34,8 @@ jobs:
           PHP_VERSION=$(echo $PHP_IMAGE | cut -d':' -f2 | cut -d'-' -f1)
           BASE_TAG="${FS_VERSION}-php${PHP_VERSION}"
           if [[ "${{ github.ref_name }}" == "develop" ]]; then
-            IMAGE_TAG="develop-${BASE_TAG}"
+            GIT_SHA="${{ github.sha }}"
+            IMAGE_TAG="${{ github.ref_name }}-${GIT_SHA:0:7}-$(date +%s)"
           else
             IMAGE_TAG="${BASE_TAG}"
           fi
