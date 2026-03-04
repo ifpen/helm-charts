@@ -32,11 +32,26 @@ jobs:
           FS_VERSION=$(grep 'ARG FILESENDER_VERSION=' docker/filesender/Dockerfile | head -n 1 | cut -d'=' -f2 | tr -d '"' | tr -d ' ')
           PHP_IMAGE=$(grep '^FROM php:' docker/filesender/Dockerfile | head -n 1 | awk '{print $2}')
           PHP_VERSION=$(echo $PHP_IMAGE | cut -d':' -f2 | cut -d'-' -f1)
+          BASE_TAG="${FS_VERSION}-php${PHP_VERSION}"
+          if [[ "${{ github.ref_name }}" == "develop" ]]; then
+            IMAGE_TAG="develop-${BASE_TAG}"
+          else
+            IMAGE_TAG="${BASE_TAG}"
+          fi
           echo "fs_version=${FS_VERSION}" >> "$GITHUB_OUTPUT"
           echo "php_version=${PHP_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${FS_VERSION}-php${PHP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push
+      - name: Build and push (develop)
+        if: github.ref_name == 'develop'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/filesender
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/filesender:${{ steps.vars.outputs.image_tag }}
+
+      - name: Build and push (main)
+        if: github.ref_name == 'main'
         uses: docker/build-push-action@v6
         with:
           context: ./docker/filesender
@@ -46,7 +61,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/filesender:latest
 
       - name: Update Helm Chart
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+        if: github.ref_name == 'main' || github.ref_name == 'develop'
         run: |
           CHART_FILE="charts/filesender/Chart.yaml"
           VALUES_FILE="charts/filesender/values.yaml"
