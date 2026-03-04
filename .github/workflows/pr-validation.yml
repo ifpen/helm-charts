@@ -1,0 +1,67 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'charts/**'
+      - 'docker/**'
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      charts: ${{ steps.filter.outputs.charts }}
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            charts:
+              - 'charts/**'
+            docker:
+              - 'docker/**'
+
+  lint-chart:
+    needs: changes
+    if: needs.changes.outputs.charts == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint Helm chart
+        run: helm lint charts/filesender
+
+      - name: Template Helm chart
+        run: helm template charts/filesender
+
+  build-docker:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/filesender
+          push: false
+          tags: ghcr.io/${{ github.repository_owner }}/filesender:pr-${{ github.event.pull_request.number }}

@@ -8,14 +8,6 @@ on:
     branches:
       - main
       - develop
-  pull_request:
-    paths:
-      - 'docker/filesender/**'
-      - '.github/workflows/filesender-image.yml'
-    types:
-      - opened
-      - synchronize
-      - reopened
 
 jobs:
   build:
@@ -44,8 +36,7 @@ jobs:
           echo "php_version=${PHP_VERSION}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${FS_VERSION}-php${PHP_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push (push to main/develop)
-        if: github.event_name == 'push'
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: ./docker/filesender
@@ -54,26 +45,15 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/filesender:${{ steps.vars.outputs.image_tag }}
             ghcr.io/${{ github.repository_owner }}/filesender:latest
 
-      - name: Build and push (PR)
-        if: github.event_name == 'pull_request'
-        uses: docker/build-push-action@v6
-        with:
-          context: ./docker/filesender
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/filesender:pr-${{ github.event.pull_request.number }}
-
       - name: Update Helm Chart
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
         run: |
           CHART_FILE="charts/filesender/Chart.yaml"
           VALUES_FILE="charts/filesender/values.yaml"
           FS_VERSION="${{ steps.vars.outputs.fs_version }}"
           
-          # Mise à jour appVersion avec la version FileSender
           sed -i "s/^appVersion: .*/appVersion: \"${FS_VERSION}\"/" $CHART_FILE
           
-          # Gestion de la version du chart (X.Y.Z) où X.Y = FS_VERSION et Z = patch increment
           CURRENT_CHART_VERSION=$(grep '^version:' $CHART_FILE | awk '{print $2}')
           BASE_VERSION=$(echo $FS_VERSION | cut -d'.' -f1-2)
           
@@ -86,17 +66,13 @@ jobs:
           fi
           
           sed -i "s/^version: .*/version: ${NEW_VERSION}/" $CHART_FILE
-          
-          # Mise à jour du tag de l'image FileSender dans values.yaml (only first occurrence under image:)
           sed -i '0,/^  tag: .*/{s/^  tag: .*/  tag: "'"${{ steps.vars.outputs.image_tag }}"'"/}' $VALUES_FILE
-          
-          # Mise à jour de la description dans Chart.yaml
           sed -i "s/^description: FileSender v[0-9]\+\.[0-9]\+/description: FileSender v${FS_VERSION}/" $CHART_FILE
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add $CHART_FILE $VALUES_FILE
           
-          # En Gitflow, on push sur la branche courante (develop ou main)
           git commit -m "chore: update filesender to ${{ steps.vars.outputs.image_tag }} [skip ci]"
           git push origin ${{ github.ref_name }}
+
