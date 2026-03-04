@@ -3,6 +3,7 @@
   "extends": [
     "config:base"
   ],
+  "baseBranches": ["develop"],
   "packageRules": [
     {
       "matchDatasources": ["github-releases"],
