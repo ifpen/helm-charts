@@ -44,8 +44,8 @@ RUN git clone --depth 1 --branch ${FILESENDER_VERSION} https://github.com/filese
 # Le PR #2530 a introduit window.filesender.client.xhrResponse() dans le Web Worker,
 # mais client.js n'est pas chargé dans le contexte du Worker, causant un crash
 # lors de l'envoi de gros fichiers. On rétablit le fix inline du PR #2522.
-RUN sed -i 's@window\.filesender\.client\.xhrResponse( xhr )@(xhr.responseText || '"'"''"'"').replace(/^\\s+/, '"'"''"'"').replace(/\\s+$/, '"'"''"'"')@' \
-    /build/filesender/www/js/terasender/terasender_worker.js
+COPY patches/fix-terasender-xhrresponse.patch /tmp/
+RUN cd /build/filesender && git apply /tmp/fix-terasender-xhrresponse.patch
 
 # Installation des dépendances S3 optionnelles via Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \

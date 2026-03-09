@@ -1,0 +1,11 @@
+--- a/www/js/terasender/terasender_worker.js
++++ b/www/js/terasender/terasender_worker.js
+@@ -505,7 +505,7 @@
+             return;
+             
+         }else{ // We have an error
+-            var msg = window.filesender.client.xhrResponse( xhr );
++            var msg = (xhr.responseText || '').replace(/^\s+/, '').replace(/\s+$/, '');
+             
+             try {
+                 var error = JSON.parse(msg);
