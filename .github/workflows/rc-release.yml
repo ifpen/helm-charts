@@ -1,0 +1,125 @@
+name: RC Release on PR to main
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+jobs:
+  rc-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint Helm chart
+        run: helm lint charts/filesender
+
+      - name: Template Helm chart
+        run: helm template charts/filesender
+
+      - name: Determine RC version
+        id: rc-version
+        run: |
+          CHART_VERSION=$(grep '^version:' charts/filesender/Chart.yaml | awk '{print $2}')
+          echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
+
+          RC_NUMBER=${{ github.event.pull_request.number }}
+          COMMITS_AHEAD=$(git rev-list --count origin/main..HEAD)
+
+          RC_VERSION="${CHART_VERSION}-rc.${COMMITS_AHEAD}"
+          echo "rc_version=${RC_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "📦 Version RC: ${RC_VERSION}"
+
+      - name: Build RC Helm package
+        run: |
+          RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
+
+          cp -r charts/filesender /tmp/filesender-rc
+          sed -i "s/^version: .*/version: ${RC_VERSION}/" /tmp/filesender-rc/Chart.yaml
+
+          helm package /tmp/filesender-rc -d /tmp/helm-packages/
+          echo "📦 Package créé : filesender-${RC_VERSION}.tgz"
+
+      - name: Publish RC to GitHub Pages (Helm repo)
+        run: |
+          RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
+
+          git clone --branch gh-pages --single-branch \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            /tmp/gh-pages
+
+          cp /tmp/helm-packages/filesender-${RC_VERSION}.tgz /tmp/gh-pages/
+
+          cd /tmp/gh-pages
+          helm repo index . --url "https://${{ github.repository_owner }}.github.io/helm-charts/"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "chore: publish RC ${RC_VERSION} from PR #${{ github.event.pull_request.number }}"
+          git push
+
+      - name: Comment PR with RC info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const rcVersion = '${{ steps.rc-version.outputs.rc_version }}';
+            const chartVersion = '${{ steps.rc-version.outputs.chart_version }}';
+            const body = `## 🏷️ Version RC publiée
+
+            | | |
+            |---|---|
+            | **Chart RC** | \`${rcVersion}\` |
+            | **Version finale prévue** | \`${chartVersion}\` |
+            | **FileSender** | \`${chartVersion.split('.').slice(0,2).join('.')}\` |
+
+            ### Installation pour test
+            \`\`\`bash
+            helm repo update ifpen
+            helm install filesender-rc ifpen/filesender --version ${rcVersion}
+            \`\`\`
+
+            ### Vérification
+            \`\`\`bash
+            helm search repo ifpen/filesender --versions --devel
+            \`\`\`
+
+            > ⚠️ Cette version RC sera remplacée par la version stable \`${chartVersion}\` lors du merge.
+            `;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('Version RC publiée')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body,
+              });
+            }
