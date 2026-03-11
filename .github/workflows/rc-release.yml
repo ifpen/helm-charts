@@ -103,22 +103,101 @@ jobs:
           helm package /tmp/filesender-rc -d /tmp/helm-packages/
           echo "📦 Package créé : filesender-${RC_VERSION}.tgz"
 
-      - name: Publish RC to GitHub Pages (Helm repo)
+      - name: Generate RC changelog
+        id: changelog
         run: |
           RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
+
+          # Find the previous RC tag for changelog comparison (exclude current RC version)
+          PREV_RC_TAG=$(git for-each-ref --sort=-creatordate --format='%(refname:short)' refs/tags \
+            | grep '^filesender-.*-rc\.' | grep -v "filesender-${RC_VERSION}$" | head -1)
+
+          if [ -n "$PREV_RC_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "${PREV_RC_TAG}..HEAD")
+            COMPARE_REF="$PREV_RC_TAG"
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "origin/main..HEAD")
+            COMPARE_REF="main"
+          fi
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- No changes"
+          fi
+
+          # Write notes to a temp file for multi-line support
+          NOTES_FILE=$(mktemp)
+          {
+            echo "## 📦 RC \`${RC_VERSION}\` from PR #${{ github.event.pull_request.number }}"
+            echo ""
+            echo "### Changes since \`${COMPARE_REF}\`"
+            echo ""
+            echo "$CHANGELOG"
+          } > "$NOTES_FILE"
+
+          echo "notes_file=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Create RC GitHub pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
+          TAG="filesender-${RC_VERSION}"
+          TGZ_FILE="/tmp/helm-packages/filesender-${RC_VERSION}.tgz"
+
+          # Delete existing release with same tag if re-running
+          gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
+          git push --delete origin "${TAG}" 2>/dev/null || true
+          git tag -d "${TAG}" 2>/dev/null || true
+
+          # Create a tag at the PR head commit
+          git tag "${TAG}"
+          git push origin "${TAG}"
+
+          # Create pre-release with chart package as asset and changelog
+          gh release create "${TAG}" "${TGZ_FILE}" \
+            --prerelease \
+            --title "filesender-${RC_VERSION}" \
+            --notes-file "${{ steps.changelog.outputs.notes_file }}"
+
+      - name: Clean up old RC pre-releases (keep last 3)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # List all RC pre-releases sorted by creation date (newest first), skip the 3 most recent
+          gh release list --limit 100 --json tagName,isPrerelease,createdAt \
+            --jq '[.[] | select(.isPrerelease) | select(.tagName | test("-rc\\."))] | sort_by(.createdAt) | reverse | .[3:] | .[].tagName' \
+            | while read -r tag; do
+                echo "Deleting old RC release: ${tag}"
+                gh release delete "${tag}" --yes --cleanup-tag
+              done
+
+      - name: Update Helm repo index on gh-pages
+        run: |
+          RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
+          TAG="filesender-${RC_VERSION}"
 
           git clone --branch gh-pages --single-branch \
             "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
             /tmp/gh-pages
 
-          cp /tmp/helm-packages/filesender-${RC_VERSION}.tgz /tmp/gh-pages/
+          # Generate index entry with release asset URL and merge with existing index
+          mkdir -p /tmp/rc-index
+          cp /tmp/helm-packages/filesender-${RC_VERSION}.tgz /tmp/rc-index/
 
           cd /tmp/gh-pages
-          helm repo index . --url "https://${{ github.repository_owner }}.github.io/helm-charts/"
+          if [ -f index.yaml ]; then
+            helm repo index /tmp/rc-index \
+              --url "https://github.com/${{ github.repository }}/releases/download/${TAG}" \
+              --merge index.yaml
+          else
+            helm repo index /tmp/rc-index \
+              --url "https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          fi
+          mv /tmp/rc-index/index.yaml index.yaml
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add index.yaml
           git commit -m "chore: publish RC ${RC_VERSION} from PR #${{ github.event.pull_request.number }}"
           git push
 
