@@ -21,28 +21,70 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
+      - name: Clean up RC pre-releases
         env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Delete all RC pre-releases and their tags before chart-releaser runs
+          gh release list --limit 100 --json tagName,isPrerelease \
+            --jq '.[] | select(.isPrerelease) | select(.tagName | test("-rc\\.")) | .tagName' \
+            | while read -r tag; do
+                echo "Deleting RC release: ${tag}"
+                gh release delete "${tag}" --yes --cleanup-tag
+              done
 
-      - name: Clean up RC artifacts from gh-pages
+      - name: Clean up RC entries from Helm repo index
         run: |
           git clone --branch gh-pages --single-branch \
             "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
             /tmp/gh-pages-cleanup
 
           cd /tmp/gh-pages-cleanup
+
+          # Remove any leftover .tgz files and rc/ directory from gh-pages
+          CHANGED=false
+          if ls *.tgz 1>/dev/null 2>&1; then
+            git rm -f *.tgz
+            CHANGED=true
+          fi
           if [ -d rc ]; then
             git rm -rf rc
+            CHANGED=true
+          fi
+
+          # Remove RC entries from index.yaml
+          if grep -q '\-rc\.' index.yaml 2>/dev/null; then
+            pip install pyyaml -q
+            python3 -c "
+          import yaml
+          with open('index.yaml') as f:
+              index = yaml.safe_load(f)
+          for name in list(index.get('entries', {}).keys()):
+              index['entries'][name] = [
+                  e for e in index['entries'][name]
+                  if '-rc.' not in str(e.get('version', ''))
+              ]
+          with open('index.yaml', 'w') as f:
+              yaml.dump(index, f, default_flow_style=False, sort_keys=False)
+          "
+            git add index.yaml
+            CHANGED=true
+          fi
+
+          if [ "$CHANGED" = true ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "chore: clean up RC artifacts after stable release"
+            git commit -m "chore: clean up RC artifacts before stable release"
             git push
             echo "🧹 RC artifacts cleaned up"
           else
             echo "🧹 No RC artifacts to clean up"
           fi
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Update README chart table
         run: |

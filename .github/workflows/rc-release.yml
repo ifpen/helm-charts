@@ -103,28 +103,54 @@ jobs:
           helm package /tmp/filesender-rc -d /tmp/helm-packages/
           echo "📦 Package créé : filesender-${RC_VERSION}.tgz"
 
-      - name: Publish RC to GitHub Pages (Helm repo)
+      - name: Create RC GitHub pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
+          TAG="filesender-${RC_VERSION}"
+          TGZ_FILE="/tmp/helm-packages/filesender-${RC_VERSION}.tgz"
+
+          # Delete existing release with same tag if re-running
+          gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
+
+          # Create a tag at the PR head commit
+          git tag "${TAG}"
+          git push origin "${TAG}"
+
+          # Create pre-release with chart package as asset
+          gh release create "${TAG}" "${TGZ_FILE}" \
+            --prerelease \
+            --title "filesender-${RC_VERSION}" \
+            --notes "Release candidate from PR #${{ github.event.pull_request.number }}"
+
+      - name: Update Helm repo index on gh-pages
+        run: |
+          RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
+          TAG="filesender-${RC_VERSION}"
 
           git clone --branch gh-pages --single-branch \
             "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
             /tmp/gh-pages
 
-          mkdir -p /tmp/gh-pages/rc
-          cp /tmp/helm-packages/filesender-${RC_VERSION}.tgz /tmp/gh-pages/rc/
+          # Generate index entry with release asset URL and merge with existing index
+          mkdir -p /tmp/rc-index
+          cp /tmp/helm-packages/filesender-${RC_VERSION}.tgz /tmp/rc-index/
 
           cd /tmp/gh-pages
           if [ -f index.yaml ]; then
-            helm repo index rc/ --url "https://${{ github.repository_owner }}.github.io/helm-charts/rc" --merge index.yaml
+            helm repo index /tmp/rc-index \
+              --url "https://github.com/${{ github.repository }}/releases/download/${TAG}" \
+              --merge index.yaml
           else
-            helm repo index rc/ --url "https://${{ github.repository_owner }}.github.io/helm-charts/rc"
+            helm repo index /tmp/rc-index \
+              --url "https://github.com/${{ github.repository }}/releases/download/${TAG}"
           fi
-          mv rc/index.yaml index.yaml
+          mv /tmp/rc-index/index.yaml index.yaml
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add index.yaml
           git commit -m "chore: publish RC ${RC_VERSION} from PR #${{ github.event.pull_request.number }}"
           git push
 
