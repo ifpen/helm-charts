@@ -21,15 +21,15 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
-      - name: Clean up RC pre-releases
+      - name: Clean up RC pre-releases (keep last 3)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Delete all RC pre-releases and their tags before chart-releaser runs
-          gh release list --limit 100 --json tagName,isPrerelease \
-            --jq '.[] | select(.isPrerelease) | select(.tagName | test("-rc\\.")) | .tagName' \
+          # Delete old RC pre-releases, keeping the 3 most recent
+          gh release list --limit 100 --json tagName,isPrerelease,createdAt \
+            --jq '[.[] | select(.isPrerelease) | select(.tagName | test("-rc\\."))] | sort_by(.createdAt) | reverse | .[3:] | .[].tagName' \
             | while read -r tag; do
-                echo "Deleting RC release: ${tag}"
+                echo "Deleting old RC release: ${tag}"
                 gh release delete "${tag}" --yes --cleanup-tag
               done
 
@@ -52,7 +52,7 @@ jobs:
             CHANGED=true
           fi
 
-          # Remove RC entries from index.yaml
+          # Remove old RC entries from index.yaml (keep last 3 per chart)
           if grep -q '\-rc\.' index.yaml 2>/dev/null; then
             pip install pyyaml -q
             python3 -c "
@@ -60,10 +60,10 @@ jobs:
           with open('index.yaml') as f:
               index = yaml.safe_load(f)
           for name in list(index.get('entries', {}).keys()):
-              index['entries'][name] = [
-                  e for e in index['entries'][name]
-                  if '-rc.' not in str(e.get('version', ''))
-              ]
+              stable = [e for e in index['entries'][name] if '-rc.' not in str(e.get('version', ''))]
+              rc = [e for e in index['entries'][name] if '-rc.' in str(e.get('version', ''))]
+              rc.sort(key=lambda e: e.get('created', ''), reverse=True)
+              index['entries'][name] = stable + rc[:3]
           with open('index.yaml', 'w') as f:
               yaml.dump(index, f, default_flow_style=False, sort_keys=False)
           "
