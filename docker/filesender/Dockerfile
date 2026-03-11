@@ -120,6 +120,14 @@ RUN mkdir -p \
 COPY --from=builder --chown=www-data:www-data /build/filesender /opt/filesender/filesender
 COPY --from=builder --chown=www-data:www-data /build/simplesaml /opt/filesender/simplesaml
 
+# Application des patches FileSender
+COPY patches/ /tmp/patches/
+RUN apk add --no-cache patch \
+    && cd /opt/filesender/filesender \
+    && patch -p1 < /tmp/patches/fix-bigint-overflow.patch \
+    && apk del patch \
+    && rm -rf /tmp/patches
+
 # Configuration PHP-FPM
 RUN sed -i 's/listen = 127.0.0.1:9000/listen = 127.0.0.1:9000/' /usr/local/etc/php-fpm.d/www.conf \
     && echo "php_admin_value[error_log] = /proc/self/fd/2" >> /usr/local/etc/php-fpm.d/www.conf \
