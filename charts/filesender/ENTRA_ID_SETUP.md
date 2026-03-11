@@ -116,14 +116,53 @@ New-Mailbox -Shared -Name "FileSender" -PrimarySmtpAddress "noreply-filesender@c
 
 #### d) (Recommandé) Restreindre l'application à la seule shared mailbox
 
-Pour des raisons de sécurité, limitez l'accès de l'application à cette seule boîte :
+Pour des raisons de sécurité, limitez l'accès de l'application à cette seule boîte en utilisant le **RBAC pour Applications** dans Exchange Online.
+
+> **Note :** L'ancienne méthode `New-ApplicationAccessPolicy` est **dépréciée** par Microsoft. La méthode ci-dessous (RBAC for Applications) est la méthode officiellement recommandée. Voir la [documentation Microsoft](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac).
+
+**Prérequis :** Installez et connectez-vous au module Exchange Online PowerShell :
 
 ```powershell
-New-ApplicationAccessPolicy `
+Install-Module ExchangeOnlineManagement -Scope CurrentUser
+Connect-ExchangeOnline -UserPrincipalName admin@contoso.com
+```
+
+**Étape 1 — Créer un périmètre de gestion (Management Scope)** limité à la shared mailbox :
+
+```powershell
+New-ManagementScope -Name "FileSender-MailScope" `
+  -RecipientRestrictionFilter "PrimarySmtpAddress -eq 'noreply-filesender@contoso.com'"
+```
+
+**Étape 2 — Créer un Service Principal Exchange Online** pour l'application :
+
+```powershell
+New-ServicePrincipal `
   -AppId "YOUR-APP-ID" `
-  -PolicyScopeGroupId "noreply-filesender@contoso.com" `
-  -AccessRight RestrictAccess `
-  -Description "Restrict FileSender app to its shared mailbox"
+  -ObjectId "YOUR-ENTERPRISE-APP-OBJECT-ID" `
+  -DisplayName "FileSender"
+```
+
+> **Important :** Le paramètre `-ObjectId` correspond à l'**Object ID du Service Principal** (trouvé dans **Entra ID > Applications d'entreprise > FileSender > Vue d'ensemble**), et **non** à l'Object ID de l'App Registration. Si vous obtenez une erreur sur ce paramètre, essayez `-ServiceId` à la place de `-ObjectId` (selon la version du module).
+
+**Étape 3 — Assigner le rôle `Application Mail.Send`** avec le périmètre restreint :
+
+```powershell
+New-ManagementRoleAssignment `
+  -Name "FileSender-MailSend" `
+  -App "YOUR-APP-ID" `
+  -Role "Application Mail.Send" `
+  -CustomResourceScope "FileSender-MailScope"
+```
+
+**Vérification :**
+
+```powershell
+# Vérifier le service principal
+Get-ServicePrincipal -Identity "YOUR-APP-ID"
+
+# Vérifier l'assignation de rôle
+Get-ManagementRoleAssignment -RoleAssignee "YOUR-APP-ID"
 ```
 
 #### e) Configurer les values Helm
