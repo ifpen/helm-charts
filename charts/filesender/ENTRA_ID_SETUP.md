@@ -116,53 +116,50 @@ New-Mailbox -Shared -Name "FileSender" -PrimarySmtpAddress "noreply-filesender@c
 
 #### d) (Recommandé) Restreindre l'application à la seule shared mailbox
 
-Pour des raisons de sécurité, limitez l'accès de l'application à cette seule boîte en utilisant le **RBAC pour Applications** dans Exchange Online.
+Pour des raisons de sécurité, limitez l'accès de l'application à cette seule boîte via une `ApplicationAccessPolicy`.
 
-> **Note :** L'ancienne méthode `New-ApplicationAccessPolicy` est **dépréciée** par Microsoft. La méthode ci-dessous (RBAC for Applications) est la méthode officiellement recommandée. Voir la [documentation Microsoft](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac).
+> **Important :** Le paramètre `-PolicyScopeGroupId` n'accepte **pas** directement une boîte aux lettres partagée. Il faut passer par un **groupe de sécurité activé pour la messagerie** (Mail-Enabled Security Group) contenant la shared mailbox.
 
 **Prérequis :** Installez et connectez-vous au module Exchange Online PowerShell :
 
 ```powershell
-Install-Module ExchangeOnlineManagement -Scope CurrentUser
-Connect-ExchangeOnline -UserPrincipalName admin@contoso.com
+Install-Module -Name ExchangeOnlineManagement
+Connect-ExchangeOnline
 ```
 
-**Étape 1 — Créer un périmètre de gestion (Management Scope)** limité à la shared mailbox :
+**Étape 1 — Créer un groupe de sécurité** dédié à cette restriction :
 
 ```powershell
-New-ManagementScope -Name "FileSender-MailScope" `
-  -RecipientRestrictionFilter "PrimarySmtpAddress -eq 'noreply-filesender@contoso.com'"
+New-DistributionGroup -Name "SG-App-FileSender" -Alias "sg-app-filesender" -Type "Security"
 ```
 
-**Étape 2 — Créer un Service Principal Exchange Online** pour l'application :
+**Étape 2 — Ajouter la shared mailbox** comme membre du groupe :
 
 ```powershell
-New-ServicePrincipal `
+Add-DistributionGroupMember -Identity "SG-App-FileSender" -Member "noreply-filesender@contoso.com"
+```
+
+**Étape 3 — Appliquer la politique d'accès** sur le groupe :
+
+```powershell
+New-ApplicationAccessPolicy `
   -AppId "YOUR-APP-ID" `
-  -ObjectId "YOUR-ENTERPRISE-APP-OBJECT-ID" `
-  -DisplayName "FileSender"
+  -PolicyScopeGroupId "SG-App-FileSender@contoso.com" `
+  -AccessRight RestrictAccess `
+  -Description "Restrict FileSender app to its shared mailbox"
 ```
 
-> **Important :** Le paramètre `-ObjectId` correspond à l'**Object ID du Service Principal** (trouvé dans **Entra ID > Applications d'entreprise > FileSender > Vue d'ensemble**), et **non** à l'Object ID de l'App Registration. Si vous obtenez une erreur sur ce paramètre, essayez `-ServiceId` à la place de `-ObjectId` (selon la version du module).
-
-**Étape 3 — Assigner le rôle `Application Mail.Send`** avec le périmètre restreint :
+**Vérification :** (peut prendre 30 à 60 minutes pour se propager)
 
 ```powershell
-New-ManagementRoleAssignment `
-  -Name "FileSender-MailSend" `
-  -App "YOUR-APP-ID" `
-  -Role "Application Mail.Send" `
-  -CustomResourceScope "FileSender-MailScope"
-```
+# Vérifier que l'app a accès à la shared mailbox (résultat attendu : Granted)
+Test-ApplicationAccessPolicy -Identity "noreply-filesender@contoso.com" -AppId "YOUR-APP-ID"
 
-**Vérification :**
+# Vérifier qu'une autre boîte est bien bloquée (résultat attendu : Denied)
+Test-ApplicationAccessPolicy -Identity "autre-utilisateur@contoso.com" -AppId "YOUR-APP-ID"
 
-```powershell
-# Vérifier le service principal
-Get-ServicePrincipal -Identity "YOUR-APP-ID"
-
-# Vérifier l'assignation de rôle
-Get-ManagementRoleAssignment -RoleAssignee "YOUR-APP-ID"
+# Lister les politiques en place
+Get-ApplicationAccessPolicy
 ```
 
 #### e) Configurer les values Helm
