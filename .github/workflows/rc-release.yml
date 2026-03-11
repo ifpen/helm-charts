@@ -111,10 +111,16 @@ jobs:
             "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
             /tmp/gh-pages
 
-          cp /tmp/helm-packages/filesender-${RC_VERSION}.tgz /tmp/gh-pages/
+          mkdir -p /tmp/gh-pages/rc
+          cp /tmp/helm-packages/filesender-${RC_VERSION}.tgz /tmp/gh-pages/rc/
 
           cd /tmp/gh-pages
-          helm repo index . --url "https://${{ github.repository_owner }}.github.io/helm-charts/"
+          if [ -f index.yaml ]; then
+            helm repo index rc/ --url "https://${{ github.repository_owner }}.github.io/helm-charts/rc" --merge index.yaml
+          else
+            helm repo index rc/ --url "https://${{ github.repository_owner }}.github.io/helm-charts/rc"
+          fi
+          mv rc/index.yaml index.yaml
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

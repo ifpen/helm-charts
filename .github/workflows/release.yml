@@ -26,6 +26,24 @@ jobs:
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
+      - name: Clean up RC artifacts from gh-pages
+        run: |
+          git clone --branch gh-pages --single-branch \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            /tmp/gh-pages-cleanup
+
+          cd /tmp/gh-pages-cleanup
+          if [ -d rc ]; then
+            git rm -rf rc
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore: clean up RC artifacts after stable release"
+            git push
+            echo "🧹 RC artifacts cleaned up"
+          else
+            echo "🧹 No RC artifacts to clean up"
+          fi
+
       - name: Update README chart table
         run: |
           # Build the new table from Chart.yaml files
