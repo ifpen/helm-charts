@@ -70,7 +70,7 @@ filesender:
       existingSecret: ""
       existingSecretKeyAccessKey: "s3-access-key"
       existingSecretKeySecretKey: "s3-secret-key"
-  uploadChunkSize: ""
+  uploadChunkSize: ""  # e.g. "1024 * 1024 * 40" for 40MB chunks (recommended for S3). Requires memory_limit >= 5x this value.
   
   # Chemins de fichiers
   paths:
@@ -257,10 +257,10 @@ ingress:
 # Resources pour le conteneur FileSender
 resources:
   requests:
-    memory: "256Mi"
+    memory: "512Mi"
     cpu: "100m"
   limits:
-    memory: "512Mi"
+    memory: "1536Mi"
     cpu: "500m"
 
 # CronJob pour le nettoyage
