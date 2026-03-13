@@ -6,7 +6,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/ifpen/filesender
-  tag: "develop-acad64a-1773347857"
+  tag: "develop-aa6205a-1773428967"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
