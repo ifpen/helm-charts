@@ -238,12 +238,15 @@ service:
 ingress:
   enabled: true
   className: ""
-  annotations: {}
+  annotations: 
     # For nginx-ingress controller, these annotations help with HTTPS:
-    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     # For cert-manager with Let's Encrypt:
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100M"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"     
   hosts:
     - host: filesender.example.com
       paths:
