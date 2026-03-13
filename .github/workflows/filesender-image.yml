@@ -45,7 +45,7 @@ jobs:
 
       - name: Build and push (develop)
         if: github.ref_name == 'develop'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./docker/filesender
           push: true
@@ -53,7 +53,7 @@ jobs:
 
       - name: Build and push (main)
         if: github.ref_name == 'main'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./docker/filesender
           push: true
