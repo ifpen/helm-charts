@@ -293,7 +293,7 @@ spec:
             {{- end }}
             
             # Persistent storage for uploaded files
-            {{- if .Values.persistence.enabled }}
+            {{- if or .Values.persistence.enabled (eq .Values.filesender.storage.type "CloudS3") }}
             - name: filesender-data
               mountPath: {{ .Values.filesender.storage.path }}
             {{- end }}
@@ -373,7 +373,10 @@ spec:
             items:
               - key: saml20-idp-remote.php
                 path: saml20-idp-remote.php
-        {{- if .Values.persistence.enabled }}
+        {{- if eq .Values.filesender.storage.type "CloudS3" }}
+        - name: filesender-data
+          emptyDir: {}
+        {{- else if .Values.persistence.enabled }}
         - name: filesender-data
           persistentVolumeClaim:
             claimName: {{ include "filesender.fullname" . }}-data
