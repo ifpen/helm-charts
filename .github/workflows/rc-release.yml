@@ -79,7 +79,7 @@ jobs:
 
       - name: Build and push Docker RC image
         if: steps.rc-version.outputs.docker_changed == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./docker/filesender
           push: true
@@ -202,7 +202,7 @@ jobs:
           git push
 
       - name: Comment PR with RC info
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const rcVersion = '${{ steps.rc-version.outputs.rc_version }}';
