@@ -32,13 +32,35 @@ jobs:
       - name: Determine RC version and detect Docker changes
         id: rc-version
         run: |
+          # Extract MAJOR.MINOR from Chart.yaml in the PR branch
           CHART_VERSION=$(grep '^version:' charts/filesender/Chart.yaml | awk '{print $2}')
-          echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
+          MAJOR_MINOR=$(echo "$CHART_VERSION" | cut -d'.' -f1-2)
 
-          COMMITS_AHEAD=$(git rev-list --count origin/main..HEAD)
+          # Find the latest stable tag matching MAJOR.MINOR (exclude RC tags)
+          LATEST_STABLE=$(git tag -l "filesender-${MAJOR_MINOR}.*" | grep -v '\-rc\.' | sort -V | tail -1)
 
-          RC_VERSION="${CHART_VERSION}-rc.${COMMITS_AHEAD}"
+          if [ -n "$LATEST_STABLE" ]; then
+            LAST_PATCH=$(echo "$LATEST_STABLE" | sed "s/filesender-${MAJOR_MINOR}\.//")
+            NEW_PATCH=$((LAST_PATCH + 1))
+          else
+            NEW_PATCH=0
+          fi
+
+          BASE_VERSION="${MAJOR_MINOR}.${NEW_PATCH}"
+          echo "chart_version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+
+          # Find the highest existing RC number for this base version and increment
+          LAST_RC=$(git tag -l "filesender-${BASE_VERSION}-rc.*" | grep -oE '[0-9]+$' | sort -n | tail -1)
+
+          if [ -n "$LAST_RC" ]; then
+            RC_NUM=$((LAST_RC + 1))
+          else
+            RC_NUM=1
+          fi
+
+          RC_VERSION="${BASE_VERSION}-rc.${RC_NUM}"
           echo "rc_version=${RC_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "rc_num=${RC_NUM}" >> "$GITHUB_OUTPUT"
           echo "📦 Version RC: ${RC_VERSION}"
 
           # Detect if docker/filesender files changed compared to main
@@ -57,7 +79,7 @@ jobs:
             fi
 
             BASE_TAG="${FS_VERSION}-php${PHP_VERSION}"
-            RC_IMAGE_TAG="${BASE_TAG}-rc.${COMMITS_AHEAD}"
+            RC_IMAGE_TAG="${BASE_TAG}-rc.${RC_NUM}"
             RC_IMAGE="ghcr.io/${{ github.repository_owner }}/filesender:${RC_IMAGE_TAG}"
             echo "rc_image_tag=${RC_IMAGE_TAG}" >> "$GITHUB_OUTPUT"
             echo "rc_image=${RC_IMAGE}" >> "$GITHUB_OUTPUT"
@@ -79,7 +101,7 @@ jobs:
 
       - name: Build and push Docker RC image
         if: steps.rc-version.outputs.docker_changed == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./docker/filesender
           push: true
@@ -202,7 +224,7 @@ jobs:
           git push
 
       - name: Comment PR with RC info
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const rcVersion = '${{ steps.rc-version.outputs.rc_version }}';
