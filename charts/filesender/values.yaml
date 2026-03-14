@@ -194,7 +194,7 @@ postgresql:
     enabled: true
     image:
       repository: postgres
-      tag: "16-alpine"
+      tag: "16.13-alpine3.23"
       pullPolicy: IfNotPresent
     database: "filesender"
     username: "filesender"
