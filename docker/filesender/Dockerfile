@@ -5,7 +5,7 @@ FROM php:8.5.4-fpm-alpine3.22 AS builder
 
 # Arguments de build
 ARG FILESENDER_VERSION=3.6
-ARG SIMPLESAMLPHP_VERSION=2.4.5
+ARG SIMPLESAMLPHP_VERSION=2.5.0
 
 # Installation des dépendances de build
 RUN apk add --no-cache --virtual .build-deps \
