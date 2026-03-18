@@ -1,0 +1,77 @@
+{{- if .Values.mariadb.internal.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mediawiki.fullname" . }}-mariadb
+  labels:
+    {{- include "mediawiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mediawiki.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mariadb
+  template:
+    metadata:
+      labels:
+        {{- include "mediawiki.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mariadb
+    spec:
+      containers:
+        - name: mariadb
+          image: "{{ .Values.mariadb.internal.image.repository }}:{{ .Values.mariadb.internal.image.tag }}"
+          imagePullPolicy: {{ .Values.mariadb.internal.image.pullPolicy }}
+          ports:
+            - name: mysql
+              containerPort: 3306
+              protocol: TCP
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediawiki.fullname" . }}
+                  key: mariadb-root-password
+            - name: MARIADB_DATABASE
+              value: {{ .Values.mariadb.internal.database | quote }}
+            - name: MARIADB_USER
+              value: {{ .Values.mariadb.internal.user | quote }}
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediawiki.fullname" . }}
+                  key: mariadb-password
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - "mariadb-admin ping -u root -p\"${MARIADB_ROOT_PASSWORD}\""
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - "mariadb -u root -p\"${MARIADB_ROOT_PASSWORD}\" -e 'SELECT 1'"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.mariadb.internal.resources | nindent 12 }}
+          volumeMounts:
+            - name: mariadb-data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: mariadb-data
+          {{- if .Values.mariadb.internal.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "mediawiki.fullname" . }}-mariadb
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

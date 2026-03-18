@@ -1,0 +1,148 @@
+# Default values for mediawiki.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: mediawiki
+  tag: "1.45"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Configuration MediaWiki
+mediawiki:
+  # Nom du site wiki
+  siteName: "Mon Wiki"
+  # Langue de l'interface (ex: fr, en, de)
+  language: "fr"
+  # URL de base du wiki (obligatoire)
+  siteUrl: "https://wiki.example.com"
+  # Logo du wiki (URL relative ou absolue)
+  logo: ""
+
+  # Compte administrateur initial
+  adminUser: "admin"
+  # Mot de passe de l'administrateur (généré aléatoirement si vide)
+  adminPassword: ""
+  # Email de l'administrateur
+  adminEmail: "admin@example.com"
+
+  # Clé secrète pour les sessions (générée aléatoirement si vide)
+  secretKey: ""
+  # Clé de mise à jour (générée aléatoirement si vide)
+  upgradeKey: ""
+
+  # Activer la création de compte par les utilisateurs
+  userCanCreateAccount: true
+  # Autoriser les modifications anonymes
+  allowAnonymousEditing: false
+
+  # Extensions activées
+  extensions:
+    - ParserFunctions
+    - WikiEditor
+
+  # Fuseau horaire
+  timezone: "Europe/Paris"
+
+  # Paramètres de cache (objectcache)
+  cache:
+    type: "CACHE_NONE"  # CACHE_NONE, CACHE_ACCEL, CACHE_MEMCACHED
+
+# Configuration de la base de données MariaDB/MySQL
+mariadb:
+  internal:
+    enabled: true
+    image:
+      repository: mariadb
+      tag: "11.4"
+      pullPolicy: IfNotPresent
+    rootPassword: ""  # Généré aléatoirement si vide
+    database: "mediawiki"
+    user: "mediawiki"
+    password: ""  # Généré aléatoirement si vide
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    persistence:
+      enabled: true
+      size: "8Gi"
+      accessMode: ReadWriteOnce
+      storageClass: ""
+
+  external:
+    enabled: false
+    host: "mariadb.example.com"
+    port: 3306
+    database: "mediawiki"
+    user: "mediawiki"
+    password: ""
+    # Ou référencer un secret Kubernetes existant
+    existingSecret: ""
+    existingSecretKey: "mariadb-password"
+
+# Persistance des données (images/fichiers uploadés)
+persistence:
+  enabled: true
+  size: "10Gi"
+  accessMode: ReadWriteOnce
+  storageClass: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+    # kubernetes.io/tls-acme: "true"
+    # nginx.ingress.kubernetes.io/proxy-body-size: "512m"
+  hosts:
+    - host: wiki.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: mediawiki-tls
+  #    hosts:
+  #      - wiki.example.com
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+podSecurityContext:
+  fsGroup: 33  # www-data
+
+securityContext: {}
+
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
