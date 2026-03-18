@@ -143,6 +143,9 @@ probes:
     timeoutSeconds: 5
     failureThreshold: 3
 
+networkPolicy:
+  enabled: true
+
 nodeSelector: {}
 tolerations: []
 affinity: {}
