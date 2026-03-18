@@ -1,0 +1,18 @@
+{{- if and .Values.mariadb.internal.enabled .Values.mariadb.internal.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mediawiki.fullname" . }}-mariadb
+  labels:
+    {{- include "mediawiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+spec:
+  accessModes:
+    - {{ .Values.mariadb.internal.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.mariadb.internal.persistence.size | quote }}
+  {{- if .Values.mariadb.internal.persistence.storageClass }}
+  storageClassName: {{ .Values.mariadb.internal.persistence.storageClass | quote }}
+  {{- end }}
+{{- end }}

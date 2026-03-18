@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mediawiki.fullname" . }}
+  labels:
+    {{- include "mediawiki.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mediawiki.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "mediawiki.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "mediawiki.mariadbHost" . }} {{ include "mediawiki.mariadbPort" . }}; do
+                echo "En attente de la base de données..."
+                sleep 3
+              done
+              echo "Base de données disponible."
+      containers:
+        - name: mediawiki
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          env:
+            # Mot de passe base de données
+            {{- if .Values.mariadb.internal.enabled }}
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediawiki.fullname" . }}
+                  key: mariadb-password
+            {{- else if .Values.mariadb.external.enabled }}
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.mariadb.external.existingSecret }}
+                  name: {{ .Values.mariadb.external.existingSecret }}
+                  key: {{ .Values.mariadb.external.existingSecretKey }}
+                  {{- else }}
+                  name: {{ include "mediawiki.fullname" . }}
+                  key: mariadb-external-password
+                  {{- end }}
+            {{- end }}
+            # Clé secrète MediaWiki
+            - name: MW_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediawiki.fullname" . }}
+                  key: mediawiki-secret-key
+            # Clé de mise à jour MediaWiki
+            - name: MW_UPGRADE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediawiki.fullname" . }}
+                  key: mediawiki-upgrade-key
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /api.php?action=query&format=json
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /api.php?action=query&format=json
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: mediawiki-config
+              mountPath: /var/www/html/LocalSettings.php
+              subPath: LocalSettings.php
+            {{- if .Values.persistence.enabled }}
+            - name: mediawiki-images
+              mountPath: /var/www/html/images
+            {{- end }}
+      volumes:
+        - name: mediawiki-config
+          configMap:
+            name: {{ include "mediawiki.fullname" . }}-config
+        {{- if .Values.persistence.enabled }}
+        - name: mediawiki-images
+          persistentVolumeClaim:
+            claimName: {{ include "mediawiki.fullname" . }}-images
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

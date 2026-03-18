@@ -1,0 +1,19 @@
+{{- if .Values.mariadb.internal.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mediawiki.fullname" . }}-mariadb
+  labels:
+    {{- include "mediawiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: mysql
+      protocol: TCP
+      name: mysql
+  selector:
+    {{- include "mediawiki.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+{{- end }}

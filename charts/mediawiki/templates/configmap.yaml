@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mediawiki.fullname" . }}-config
+  labels:
+    {{- include "mediawiki.labels" . | nindent 4 }}
+data:
+  LocalSettings.php: |
+    <?php
+    # MediaWiki LocalSettings.php
+    # Généré par le Helm chart mediawiki
+
+    # Informations sur le site
+    $wgSitename = {{ .Values.mediawiki.siteName | quote }};
+    $wgMetaNamespace = {{ .Values.mediawiki.siteName | replace " " "_" | quote }};
+
+    # URL du serveur
+    $wgServer = {{ .Values.mediawiki.siteUrl | quote }};
+    $wgScriptPath = "";
+
+    # Logo
+    {{- if .Values.mediawiki.logo }}
+    $wgLogo = {{ .Values.mediawiki.logo | quote }};
+    {{- else }}
+    $wgLogo = "$wgResourceBasePath/resources/assets/mediawiki.png";
+    {{- end }}
+
+    # Base de données
+    $wgDBtype = "mysql";
+    $wgDBserver = {{ include "mediawiki.mariadbHost" . | quote }};
+    $wgDBport = {{ include "mediawiki.mariadbPort" . | quote }};
+    $wgDBname = {{ include "mediawiki.mariadbDatabase" . | quote }};
+    $wgDBuser = {{ include "mediawiki.mariadbUser" . | quote }};
+    $wgDBpassword = getenv('MARIADB_PASSWORD');
+    $wgDBprefix = "";
+    $wgDBTableOptions = "ENGINE=InnoDB, DEFAULT CHARSET=binary";
+
+    # Clés de sécurité (injectées via variables d'environnement)
+    $wgSecretKey = getenv('MW_SECRET_KEY');
+    $wgUpgradeKey = getenv('MW_UPGRADE_KEY');
+
+    # Langue et fuseau horaire
+    $wgLanguageCode = {{ .Values.mediawiki.language | quote }};
+    $wgLocaltimezone = {{ .Values.mediawiki.timezone | quote }};
+
+    # Répertoire des images uploadées
+    $wgUploadDirectory = "/var/www/html/images";
+    $wgUploadPath = "/images";
+
+    # Droits d'accès
+    {{- if .Values.mediawiki.allowAnonymousEditing }}
+    # Modifications anonymes autorisées
+    {{- else }}
+    # Modifications anonymes interdites
+    $wgGroupPermissions['*']['edit'] = false;
+    {{- end }}
+
+    {{- if not .Values.mediawiki.userCanCreateAccount }}
+    # Création de compte désactivée pour les visiteurs
+    $wgGroupPermissions['*']['createaccount'] = false;
+    {{- end }}
+
+    # Cache
+    $wgMainCacheType = {{ .Values.mediawiki.cache.type }};
+    $wgMessageCacheType = CACHE_NONE;
+    $wgParserCacheType = CACHE_NONE;
+
+    # Extensions activées
+    wfLoadSkin('Vector');
+    {{- range .Values.mediawiki.extensions }}
+    wfLoadExtension({{ . | quote }});
+    {{- end }}
+
+    # Paramètres de différenciation
+    $wgDiff3 = "/usr/bin/diff3";
+
+    # Désactiver la mise à jour automatique du schéma (sécurité)
+    $wgAllowSchemaUpdates = false;
