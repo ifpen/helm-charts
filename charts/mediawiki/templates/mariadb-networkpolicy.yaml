@@ -1,0 +1,32 @@
+{{- if and .Values.networkPolicy.enabled .Values.mariadb.internal.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mediawiki.fullname" . }}-mariadb
+  labels:
+    {{- include "mediawiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mediawiki.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mariadb
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "mediawiki.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: mediawiki
+      ports:
+        - port: 3306
+          protocol: TCP
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+{{- end }}

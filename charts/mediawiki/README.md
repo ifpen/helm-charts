@@ -130,6 +130,17 @@ Les commandes exactes sont affichées dans les notes après l'installation (`hel
 | `ingress.hosts` | Hôtes de l'Ingress | voir `values.yaml` |
 | `ingress.tls` | Configuration TLS | `[]` |
 
+### Network Policy
+
+| Paramètre | Description | Valeur par défaut |
+|-----------|-------------|-------------------|
+| `networkPolicy.enabled` | Activer les NetworkPolicies | `true` |
+
+Lorsque `networkPolicy.enabled` est `true`, deux `NetworkPolicy` sont créées :
+
+- **mediawiki** : autorise les flux entrants sur le port 80 (HTTP) et les flux sortants vers MariaDB (port 3306) et vers le DNS (port 53).
+- **mariadb** (si `mariadb.internal.enabled`) : autorise les flux entrants depuis le pod MediaWiki sur le port 3306 et les flux sortants vers le DNS (port 53).
+
 ## Désinstallation
 
 ```bash
