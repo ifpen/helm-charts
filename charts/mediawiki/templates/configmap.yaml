@@ -73,6 +73,3 @@ data:
 
     # Paramètres de différenciation
     $wgDiff3 = "/usr/bin/diff3";
-
-    # Désactiver la mise à jour automatique du schéma (sécurité)
-    $wgAllowSchemaUpdates = false;

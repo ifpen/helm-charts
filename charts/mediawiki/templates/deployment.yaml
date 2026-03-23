@@ -37,6 +37,85 @@ spec:
                 sleep 3
               done
               echo "Base de données disponible."
+        - name: init-db
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- if .Values.mariadb.internal.enabled }}
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediawiki.fullname" . }}
+                  key: mariadb-password
+            {{- else if .Values.mariadb.external.enabled }}
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.mariadb.external.existingSecret }}
+                  name: {{ .Values.mariadb.external.existingSecret }}
+                  key: {{ .Values.mariadb.external.existingSecretKey }}
+                  {{- else }}
+                  name: {{ include "mediawiki.fullname" . }}
+                  key: mariadb-external-password
+                  {{- end }}
+            {{- end }}
+            - name: MW_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediawiki.fullname" . }}
+                  key: mediawiki-admin-password
+            - name: DB_HOST
+              value: {{ include "mediawiki.mariadbHost" . | quote }}
+            - name: DB_PORT
+              value: {{ include "mediawiki.mariadbPort" . | quote }}
+            - name: DB_NAME
+              value: {{ include "mediawiki.mariadbDatabase" . | quote }}
+            - name: DB_USER
+              value: {{ include "mediawiki.mariadbUser" . | quote }}
+            - name: MW_LANG
+              value: {{ .Values.mediawiki.language | quote }}
+            - name: MW_SITE_NAME
+              value: {{ .Values.mediawiki.siteName | quote }}
+            - name: MW_ADMIN_USER
+              value: {{ .Values.mediawiki.adminUser | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              cat > /tmp/check_db.php << 'EOF'
+              <?php
+              $conn = @new mysqli(getenv('DB_HOST'), getenv('DB_USER'), getenv('MARIADB_PASSWORD'), getenv('DB_NAME'), (int)getenv('DB_PORT'));
+              if ($conn->connect_error) {
+                fwrite(STDERR, 'Database connection failed: ' . $conn->connect_error . PHP_EOL);
+                exit(1);
+              }
+              $dbName = $conn->real_escape_string(getenv('DB_NAME'));
+              $result = $conn->query("SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = '" . $dbName . "'");
+              if ($result === false) {
+                fwrite(STDERR, 'Query failed: ' . $conn->error . PHP_EOL);
+                exit(1);
+              }
+              $row = $result->fetch_assoc();
+              exit((int)$row['cnt'] > 0 ? 0 : 1);
+              EOF
+              if php /tmp/check_db.php; then
+                echo "Base de données MediaWiki déjà initialisée, opération ignorée."
+                exit 0
+              fi
+              echo "Initialisation de la base de données MediaWiki..."
+              php /var/www/html/maintenance/install.php \
+                --dbserver="${DB_HOST}:${DB_PORT}" \
+                --dbname="${DB_NAME}" \
+                --dbuser="${DB_USER}" \
+                --dbpass="${MARIADB_PASSWORD}" \
+                --pass="${MW_ADMIN_PASSWORD}" \
+                --scriptpath="" \
+                --lang="${MW_LANG}" \
+                --confpath=/tmp \
+                "${MW_SITE_NAME}" \
+                "${MW_ADMIN_USER}"
+              echo "Base de données MediaWiki initialisée avec succès."
       containers:
         - name: mediawiki
           securityContext:
