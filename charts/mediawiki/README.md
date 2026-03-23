@@ -49,26 +49,21 @@ helm install mon-wiki ifpen/mediawiki -f mes-valeurs.yaml
 
 ## Initialisation de la base de données
 
-Lors du premier déploiement, vous devez initialiser la base de données MediaWiki en exécutant le script d'installation :
+La base de données MediaWiki est initialisée **automatiquement** lors du premier déploiement grâce au conteneur d'initialisation `init-db`. Aucune intervention manuelle n'est requise.
+
+Pour vérifier le statut de l'initialisation, consultez les logs du conteneur init-db :
 
 ```bash
-# Récupérer les mots de passe depuis les secrets Kubernetes
-export MW_DB_PASS=$(kubectl get secret mon-wiki-mediawiki -o jsonpath="{.data.mariadb-password}" | base64 -d)
-export MW_ADMIN_PASS=$(kubectl get secret mon-wiki-mediawiki -o jsonpath="{.data.mediawiki-admin-password}" | base64 -d)
-
-# Lancer l'installation
-kubectl exec -it deployment/mon-wiki-mediawiki -- php /var/www/html/maintenance/install.php \
-  --dbserver=mon-wiki-mediawiki-mariadb \
-  --dbname=mediawiki \
-  --dbuser=mediawiki \
-  --dbpass="${MW_DB_PASS}" \
-  --pass="${MW_ADMIN_PASS}" \
-  --scriptpath="" \
-  "Mon Wiki" \
-  "admin"
+kubectl logs -l app.kubernetes.io/instance=mon-wiki -c init-db
 ```
 
-Les commandes exactes sont affichées dans les notes après l'installation (`helm status mon-wiki`).
+### Mise à jour du schéma après une mise à jour de MediaWiki
+
+Après une mise à jour de la version de MediaWiki, exécutez le script de mise à jour du schéma :
+
+```bash
+kubectl exec -it deployment/mon-wiki-mediawiki -- php /var/www/html/maintenance/update.php --quick
+```
 
 ## Configuration
 

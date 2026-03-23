@@ -34,20 +34,16 @@ Configuration de la base de données :
 Site MediaWiki : {{ .Values.mediawiki.siteUrl }}
 Administrateur : {{ .Values.mediawiki.adminUser }}
 
-IMPORTANT : Lors du premier accès, initialisez la base de données en exécutant :
+IMPORTANT : Lors du premier déploiement, le conteneur d'initialisation configure automatiquement la base de données MediaWiki.
+Vérifiez les logs du conteneur init-db si le démarrage prend plus longtemps que prévu :
+  kubectl logs --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "mediawiki.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -c init-db
+
+Si vous souhaitez réinitialiser manuellement la base de données ou mettre à jour le schéma :
   # Récupérer les mots de passe depuis les secrets Kubernetes
   export MW_DB_PASS=$(kubectl get secret --namespace {{ .Release.Namespace }} {{ include "mediawiki.fullname" . }} -o jsonpath="{.data.mariadb-password}" | base64 -d)
   export MW_ADMIN_PASS=$(kubectl get secret --namespace {{ .Release.Namespace }} {{ include "mediawiki.fullname" . }} -o jsonpath="{.data.mediawiki-admin-password}" | base64 -d)
 
-  # Lancer l'installation
-  kubectl exec --namespace {{ .Release.Namespace }} -it deployment/{{ include "mediawiki.fullname" . }} -- php /var/www/html/maintenance/install.php \
-    --dbserver={{ include "mediawiki.mariadbHost" . }} \
-    --dbname={{ include "mediawiki.mariadbDatabase" . }} \
-    --dbuser={{ include "mediawiki.mariadbUser" . }} \
-    --dbpass="${MW_DB_PASS}" \
-    --pass="${MW_ADMIN_PASS}" \
-    --scriptpath="" \
-    {{ .Values.mediawiki.siteName | quote }} \
-    {{ .Values.mediawiki.adminUser | quote }}
+  # Mise à jour du schéma (après une mise à jour de MediaWiki)
+  kubectl exec --namespace {{ .Release.Namespace }} -it deployment/{{ include "mediawiki.fullname" . }} -- php /var/www/html/maintenance/update.php --quick
 
 Pour plus d'informations, consultez le README du chart.
