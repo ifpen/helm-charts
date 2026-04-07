@@ -4,7 +4,7 @@
 FROM php:8.5.4-fpm-alpine3.22 AS builder
 
 # Arguments de build
-ARG FILESENDER_VERSION=3.6
+ARG FILESENDER_VERSION=3.8
 ARG SIMPLESAMLPHP_VERSION=2.4.5
 
 # Installation des dépendances de build
@@ -53,7 +53,7 @@ RUN curl -L https://github.com/simplesamlphp/simplesamlphp/releases/download/v${
 FROM php:8.5.4-fpm-alpine3.22
 
 # Metadata
-ARG FILESENDER_VERSION=3.6
+ARG FILESENDER_VERSION=3.8
 LABEL org.opencontainers.image.source="https://github.com/ifpen/helm-charts" \
       org.opencontainers.image.description="FileSender v${FILESENDER_VERSION} avec Nginx intégré" \
       org.opencontainers.image.version="${FILESENDER_VERSION}"
