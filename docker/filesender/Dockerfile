@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile pour FileSender v3.5 avec Nginx intégré
 # Base: php:8.x-fpm-alpine
 
-FROM php:8.5.4-fpm-alpine3.22 AS builder
+FROM php:8.5.5-fpm-alpine3.22 AS builder
 
 # Arguments de build
 ARG FILESENDER_VERSION=3.6
@@ -50,7 +50,7 @@ RUN curl -L https://github.com/simplesamlphp/simplesamlphp/releases/download/v${
     && mv simplesamlphp-${SIMPLESAMLPHP_VERSION} simplesaml
 
 # Image finale
-FROM php:8.5.4-fpm-alpine3.22
+FROM php:8.5.5-fpm-alpine3.22
 
 # Metadata
 ARG FILESENDER_VERSION=3.6
