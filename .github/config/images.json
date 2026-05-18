@@ -1,0 +1,9 @@
+[
+  {
+    "name": "filesender",
+    "context": "docker/filesender",
+    "dockerfile": "docker/filesender/Dockerfile",
+    "path_filter": "docker/filesender/**",
+    "version_script": ".github/scripts/version-filesender.sh"
+  }
+]

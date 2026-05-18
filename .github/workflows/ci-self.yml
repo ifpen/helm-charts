@@ -1,0 +1,29 @@
+name: CI Self (GitHub workflows)
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - '.github/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - '.github/**'
+
+jobs:
+  lint-workflows:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Lint GitHub workflows
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -shellcheck=

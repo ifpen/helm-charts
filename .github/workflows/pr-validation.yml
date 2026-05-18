@@ -10,33 +10,66 @@ on:
       - 'docker/**'
 
 jobs:
-  changes:
+  detect:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
-      charts: ${{ steps.filter.outputs.charts }}
-      docker: ${{ steps.filter.outputs.docker }}
+      charts_matrix: ${{ steps.detect.outputs.charts_matrix }}
+      images_matrix: ${{ steps.detect.outputs.images_matrix }}
+      has_charts: ${{ steps.detect.outputs.has_charts }}
+      has_images: ${{ steps.detect.outputs.has_images }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Detect changed paths
-        id: filter
-        uses: dorny/paths-filter@v3
         with:
-          filters: |
-            charts:
-              - 'charts/**'
-            docker:
-              - 'docker/**'
+          fetch-depth: 0
 
-  lint-chart:
-    needs: changes
-    if: needs.changes.outputs.charts == 'true'
+      - name: Detect changed charts and images
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          export CHANGED_FILES
+
+          python3 - <<'PY'
+          import fnmatch
+          import json
+          import os
+
+          changed = [line.strip() for line in os.getenv("CHANGED_FILES", "").splitlines() if line.strip()]
+
+          with open('.github/config/charts.json', 'r', encoding='utf-8') as f:
+              charts = json.load(f)
+          with open('.github/config/images.json', 'r', encoding='utf-8') as f:
+              images = json.load(f)
+
+          changed_charts = [c for c in charts if any(fnmatch.fnmatch(path, c.get('path_filter', '')) for path in changed)]
+          changed_images = [i for i in images if any(fnmatch.fnmatch(path, i.get('path_filter', '')) for path in changed)]
+
+          outputs = {
+              'charts_matrix': json.dumps({'include': changed_charts}),
+              'images_matrix': json.dumps({'include': changed_images}),
+              'has_charts': 'true' if changed_charts else 'false',
+              'has_images': 'true' if changed_images else 'false',
+          }
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              for key, value in outputs.items():
+                  out.write(f"{key}={value}\n")
+          PY
+
+  lint-charts:
+    needs: detect
+    if: needs.detect.outputs.has_charts == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect.outputs.charts_matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -45,18 +78,20 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Lint Helm chart
-        run: helm lint charts/filesender
+        run: helm lint ${{ matrix.path }}
 
       - name: Template Helm chart
-        run: helm template charts/filesender
+        run: helm template ${{ matrix.path }}
 
-  build-docker:
-    needs: changes
-    if: needs.changes.outputs.docker == 'true'
+  build-images:
+    needs: detect
+    if: needs.detect.outputs.has_images == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect.outputs.images_matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -67,7 +102,8 @@ jobs:
       - name: Build Docker image (no push)
         uses: docker/build-push-action@v6
         with:
-          context: ./docker/filesender
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: false
-          tags: ghcr.io/${{ github.repository_owner }}/filesender:pr-${{ github.event.pull_request.number }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/filesender:buildcache
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:pr-${{ github.event.pull_request.number }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:buildcache
