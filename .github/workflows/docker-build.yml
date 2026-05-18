@@ -184,7 +184,11 @@ jobs:
           fi
           sed -i -E "s/^version: .*/version: ${NEW_VERSION}/" "$CHART_FILE"
           if [[ -n "$DESCRIPTION_SUFFIX" ]]; then
-            sed -i -E "s/^description: .*/description: ${DESCRIPTION_SUFFIX}/" "$CHART_FILE"
+            awk -v new_desc="$DESCRIPTION_SUFFIX" '
+              BEGIN {updated=0}
+              !updated && /^description:/ {print "description: " new_desc; updated=1; next}
+              {print}
+            ' "$CHART_FILE" > "$CHART_FILE.tmp" && mv "$CHART_FILE.tmp" "$CHART_FILE"
           fi
 
           awk -v new_tag="$IMAGE_TAG" '
