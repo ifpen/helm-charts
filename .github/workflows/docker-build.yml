@@ -80,8 +80,27 @@ jobs:
         run: |
           IMAGE_NAME="${{ matrix.name }}"
           DOCKERFILE="${{ matrix.dockerfile }}"
+          VERSION_SCRIPT="${{ matrix.version_script }}"
 
-          VERSION=$(grep -E '^ARG [A-Za-z0-9_]+_VERSION=' "$DOCKERFILE" | head -n 1 | cut -d'=' -f2 | tr -d '" ')
+          VERSION=""
+          IMAGE_TAG_BASE=""
+          CHART_BASE_VERSION=""
+          DESCRIPTION_SUFFIX=""
+
+          if [[ -n "$VERSION_SCRIPT" && -f "$VERSION_SCRIPT" ]]; then
+            while IFS='=' read -r key value; do
+              case "$key" in
+                version) VERSION="$value" ;;
+                image_tag) IMAGE_TAG_BASE="$value" ;;
+                chart_base_version) CHART_BASE_VERSION="$value" ;;
+                description_suffix) DESCRIPTION_SUFFIX="$value" ;;
+              esac
+            done < <(bash "$VERSION_SCRIPT" "$DOCKERFILE")
+          else
+            VERSION=$(grep -E '^ARG [A-Za-z0-9_]+_VERSION=' "$DOCKERFILE" | head -n 1 | cut -d'=' -f2 | tr -d '" ')
+            IMAGE_TAG_BASE="$VERSION"
+          fi
+
           if [[ -z "$VERSION" ]]; then
             echo "::error::Unable to extract version from $DOCKERFILE"
             exit 1
@@ -92,13 +111,15 @@ jobs:
             IMAGE_TAG="develop-${SHA_SHORT}-$(date +%Y%m%d%H%M%S)"
             IMAGE_TAGS="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${IMAGE_TAG}"
           else
-            IMAGE_TAG="$VERSION"
+            IMAGE_TAG="$IMAGE_TAG_BASE"
             IMAGE_TAGS="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${IMAGE_TAG}\nghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:latest"
           fi
 
           {
             echo "version=$VERSION"
             echo "image_tag=$IMAGE_TAG"
+            echo "chart_base_version=$CHART_BASE_VERSION"
+            echo "description_suffix=$DESCRIPTION_SUFFIX"
             echo "image_tags<<EOF"
             echo -e "$IMAGE_TAGS"
             echo "EOF"
@@ -120,6 +141,8 @@ jobs:
         run: |
           IMAGE_TAG="${{ steps.vars.outputs.image_tag }}"
           APP_VERSION="${{ steps.vars.outputs.version }}"
+          CHART_BASE_VERSION="${{ steps.vars.outputs.chart_base_version }}"
+          DESCRIPTION_SUFFIX="${{ steps.vars.outputs.description_suffix }}"
 
           CHART_PATH=$(python3 - <<'PY'
           import json
@@ -143,12 +166,26 @@ jobs:
           sed -i -E "s/^appVersion: .*/appVersion: \"${APP_VERSION}\"/" "$CHART_FILE"
 
           CURRENT_VERSION=$(grep '^version:' "$CHART_FILE" | awk '{print $2}')
-          if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+          if [[ -n "$CHART_BASE_VERSION" ]]; then
+            if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              PATCH="${BASH_REMATCH[3]}"
+              if [[ "$CURRENT_VERSION" == "$CHART_BASE_VERSION".* ]]; then
+                NEW_VERSION="${CHART_BASE_VERSION}.$((PATCH + 1))"
+              else
+                NEW_VERSION="${CHART_BASE_VERSION}.0"
+              fi
+            else
+              NEW_VERSION="${CHART_BASE_VERSION}.0"
+            fi
+          elif [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
             NEW_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
           else
             NEW_VERSION="$CURRENT_VERSION"
           fi
           sed -i -E "s/^version: .*/version: ${NEW_VERSION}/" "$CHART_FILE"
+          if [[ -n "$DESCRIPTION_SUFFIX" ]]; then
+            sed -i -E "s/^description: .*/description: ${DESCRIPTION_SUFFIX}/" "$CHART_FILE"
+          fi
 
           awk -v new_tag="$IMAGE_TAG" '
             BEGIN {updated=0}
