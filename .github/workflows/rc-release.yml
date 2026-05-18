@@ -119,7 +119,7 @@ jobs:
 
             if [[ -n "$VERSION_SCRIPT" && -f "$VERSION_SCRIPT" ]]; then
               while IFS= read -r line; do
-                if [[ ! "$line" =~ ^[a-z_]+=[^[:cntrl:]]*$ ]]; then
+                if [[ ! "$line" =~ ^[a-z_]+=[^[:cntrl:]]+$ ]]; then
                   echo "::error::Invalid metadata from $VERSION_SCRIPT: $line"
                   exit 1
                 fi

@@ -89,7 +89,7 @@ jobs:
 
           if [[ -n "$VERSION_SCRIPT" && -f "$VERSION_SCRIPT" ]]; then
             while IFS= read -r line; do
-              if [[ ! "$line" =~ ^[a-z_]+=[^[:cntrl:]]*$ ]]; then
+              if [[ ! "$line" =~ ^[a-z_]+=[^[:cntrl:]]+$ ]]; then
                 echo "::error::Invalid metadata from $VERSION_SCRIPT: $line"
                 exit 1
               fi
@@ -102,6 +102,14 @@ jobs:
                 description_suffix) DESCRIPTION_SUFFIX="$value" ;;
               esac
             done < <(bash "$VERSION_SCRIPT" "$DOCKERFILE")
+            if [[ -z "$VERSION" ]]; then
+              echo "::error::Missing required 'version' metadata from $VERSION_SCRIPT"
+              exit 1
+            fi
+            if [[ "${{ github.ref_name }}" != "develop" && -z "$IMAGE_TAG_BASE" ]]; then
+              echo "::error::Missing required 'image_tag' metadata from $VERSION_SCRIPT"
+              exit 1
+            fi
           else
             VERSION=$(grep -E '^ARG [A-Za-z0-9_]+_VERSION=' "$DOCKERFILE" | head -n 1 | cut -d'=' -f2 | tr -d '" ')
             IMAGE_TAG_BASE="$VERSION"
@@ -190,9 +198,11 @@ jobs:
           fi
           sed -i -E "s/^version: .*/version: ${NEW_VERSION}/" "$CHART_FILE"
           if [[ -n "$DESCRIPTION_SUFFIX" ]]; then
-            awk -v new_desc="$DESCRIPTION_SUFFIX" '
+            DESCRIPTION_SUFFIX_ESCAPED="${DESCRIPTION_SUFFIX//\\/\\\\}"
+            DESCRIPTION_SUFFIX_ESCAPED="${DESCRIPTION_SUFFIX_ESCAPED//\"/\\\"}"
+            awk -v new_desc="$DESCRIPTION_SUFFIX_ESCAPED" '
               BEGIN {updated=0}
-              !updated && /^description:/ {print "description: " new_desc; updated=1; next}
+              !updated && /^description:/ {print "description: \"" new_desc "\""; updated=1; next}
               {print}
             ' "$CHART_FILE" > "$CHART_FILE.tmp" && mv "$CHART_FILE.tmp" "$CHART_FILE"
           fi
