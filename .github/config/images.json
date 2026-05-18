@@ -1,0 +1,8 @@
+[
+  {
+    "name": "filesender",
+    "context": "docker/filesender",
+    "dockerfile": "docker/filesender/Dockerfile",
+    "path_filter": "docker/filesender/**"
+  }
+]
