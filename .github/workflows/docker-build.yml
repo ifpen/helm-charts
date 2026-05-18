@@ -88,7 +88,13 @@ jobs:
           DESCRIPTION_SUFFIX=""
 
           if [[ -n "$VERSION_SCRIPT" && -f "$VERSION_SCRIPT" ]]; then
-            while IFS='=' read -r key value; do
+            while IFS= read -r line; do
+              if [[ ! "$line" =~ ^[a-z_]+=[^[:cntrl:]]*$ ]]; then
+                echo "::error::Invalid metadata from $VERSION_SCRIPT: $line"
+                exit 1
+              fi
+              key="${line%%=*}"
+              value="${line#*=}"
               case "$key" in
                 version) VERSION="$value" ;;
                 image_tag) IMAGE_TAG_BASE="$value" ;;
@@ -169,7 +175,7 @@ jobs:
           if [[ -n "$CHART_BASE_VERSION" ]]; then
             if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
               PATCH="${BASH_REMATCH[3]}"
-              if [[ "$CURRENT_VERSION" == "$CHART_BASE_VERSION".* ]]; then
+              if [[ "$CURRENT_VERSION" == "${CHART_BASE_VERSION}."* ]]; then
                 NEW_VERSION="${CHART_BASE_VERSION}.$((PATCH + 1))"
               else
                 NEW_VERSION="${CHART_BASE_VERSION}.0"

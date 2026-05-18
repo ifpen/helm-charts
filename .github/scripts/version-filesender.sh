@@ -8,7 +8,7 @@ fi
 
 DOCKERFILE="$1"
 
-FS_VERSION=$(grep 'ARG FILESENDER_VERSION=' "$DOCKERFILE" | head -n1 | cut -d'=' -f2 | tr -d '" ')
+FS_VERSION=$(grep -E '^ARG FILESENDER_VERSION=' "$DOCKERFILE" | head -n1 | cut -d'=' -f2 | tr -d '" ')
 PHP_IMAGE=$(grep '^FROM php:' "$DOCKERFILE" | head -n1 | awk '{print $2}')
 PHP_VERSION=$(echo "$PHP_IMAGE" | cut -d':' -f2 | cut -d'-' -f1)
 
