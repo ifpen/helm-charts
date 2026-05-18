@@ -126,6 +126,9 @@ jobs:
               echo "::error::Missing required 'version' metadata from $VERSION_SCRIPT"
               exit 1
             fi
+            if [[ -z "$IMAGE_TAG_BASE" ]]; then
+              IMAGE_TAG_BASE="$VERSION"
+            fi
             if [[ "${{ github.ref_name }}" != "develop" && -z "$IMAGE_TAG_BASE" ]]; then
               echo "::error::Missing required 'image_tag' metadata from $VERSION_SCRIPT"
               exit 1
