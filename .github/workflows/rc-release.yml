@@ -129,7 +129,7 @@ jobs:
           echo "rc_image=${RC_IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Login to GitHub Container Registry
-        if: matrix.docker_changed == true
+        if: matrix.docker_changed == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -137,7 +137,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker RC image
-        if: matrix.docker_changed == true
+        if: matrix.docker_changed == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image_context }}

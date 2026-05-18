@@ -65,6 +65,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.has_charts == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.detect.outputs.charts_matrix) }}
@@ -85,6 +87,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.has_images == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.detect.outputs.images_matrix) }}
