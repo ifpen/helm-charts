@@ -89,7 +89,7 @@ jobs:
 
           if [[ -n "$VERSION_SCRIPT" && -f "$VERSION_SCRIPT" ]]; then
             while IFS= read -r line; do
-              if [[ ! "$line" =~ ^[a-z_]+=[^=[:cntrl:]]+$ ]]; then
+              if [[ ! "$line" =~ ^[a-z_]+=[A-Za-z0-9._\ -]+$ ]]; then
                 echo "::error::Invalid metadata from $VERSION_SCRIPT: $line"
                 exit 1
               fi
@@ -204,6 +204,7 @@ jobs:
               BEGIN {updated=0}
               !updated && /^description:/ {print "description: \"" new_desc "\""; updated=1; next}
               {print}
+              END {if (!updated) print "description: \"" new_desc "\""}
             ' "$CHART_FILE" > "$CHART_FILE.tmp" && mv "$CHART_FILE.tmp" "$CHART_FILE"
           fi
 

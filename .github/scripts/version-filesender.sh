@@ -17,8 +17,8 @@ if [[ -z "$FS_VERSION" ]]; then
   exit 1
 fi
 
-if [[ "$FS_VERSION" != *.* ]]; then
-  echo "Error: FILESENDER_VERSION must include major.minor (got '$FS_VERSION')" >&2
+if [[ ! "$FS_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "Error: FILESENDER_VERSION must match major.minor[.patch] (got '$FS_VERSION')" >&2
   exit 1
 fi
 
