@@ -17,6 +17,11 @@ if [[ -z "$FS_VERSION" ]]; then
   exit 1
 fi
 
+if [[ "$FS_VERSION" != *.* ]]; then
+  echo "Error: FILESENDER_VERSION must include major.minor (got '$FS_VERSION')" >&2
+  exit 1
+fi
+
 if [[ -z "$PHP_IMAGE" || -z "$PHP_VERSION" ]]; then
   echo "Error: php base image/version not found in $DOCKERFILE" >&2
   exit 1
