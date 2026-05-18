@@ -89,17 +89,37 @@ jobs:
 
           if [[ -n "$VERSION_SCRIPT" && -f "$VERSION_SCRIPT" ]]; then
             while IFS= read -r line; do
-              if [[ ! "$line" =~ ^[a-z_]+=[A-Za-z0-9._\ -]+$ ]]; then
+              if [[ ! "$line" =~ ^[a-z_]+=[^=[:cntrl:]]+$ ]]; then
                 echo "::error::Invalid metadata from $VERSION_SCRIPT: $line"
                 exit 1
               fi
               key="${line%%=*}"
               value="${line#*=}"
               case "$key" in
-                version) VERSION="$value" ;;
-                image_tag) IMAGE_TAG_BASE="$value" ;;
-                chart_base_version) CHART_BASE_VERSION="$value" ;;
-                description_suffix) DESCRIPTION_SUFFIX="$value" ;;
+                version)
+                  if [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
+                    echo "::error::Invalid version value from $VERSION_SCRIPT: $value"
+                    exit 1
+                  fi
+                  VERSION="$value"
+                  ;;
+                image_tag)
+                  if [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
+                    echo "::error::Invalid image_tag value from $VERSION_SCRIPT: $value"
+                    exit 1
+                  fi
+                  IMAGE_TAG_BASE="$value"
+                  ;;
+                chart_base_version)
+                  if [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
+                    echo "::error::Invalid chart_base_version value from $VERSION_SCRIPT: $value"
+                    exit 1
+                  fi
+                  CHART_BASE_VERSION="$value"
+                  ;;
+                description_suffix)
+                  DESCRIPTION_SUFFIX="$value"
+                  ;;
               esac
             done < <(bash "$VERSION_SCRIPT" "$DOCKERFILE")
             if [[ -z "$VERSION" ]]; then
@@ -198,13 +218,12 @@ jobs:
           fi
           sed -i -E "s/^version: .*/version: ${NEW_VERSION}/" "$CHART_FILE"
           if [[ -n "$DESCRIPTION_SUFFIX" ]]; then
-            DESCRIPTION_SUFFIX_ESCAPED="${DESCRIPTION_SUFFIX//\\/\\\\}"
-            DESCRIPTION_SUFFIX_ESCAPED="${DESCRIPTION_SUFFIX_ESCAPED//\"/\\\"}"
-            awk -v new_desc="$DESCRIPTION_SUFFIX_ESCAPED" '
+            DESCRIPTION_SUFFIX_JSON=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$DESCRIPTION_SUFFIX")
+            awk -v new_desc="$DESCRIPTION_SUFFIX_JSON" '
               BEGIN {updated=0}
-              !updated && /^description:/ {print "description: \"" new_desc "\""; updated=1; next}
+              !updated && /^description:/ {print "description: " new_desc; updated=1; next}
               {print}
-              END {if (!updated) print "description: \"" new_desc "\""}
+              END {if (!updated) print "description: " new_desc}
             ' "$CHART_FILE" > "$CHART_FILE.tmp" && mv "$CHART_FILE.tmp" "$CHART_FILE"
           fi
 

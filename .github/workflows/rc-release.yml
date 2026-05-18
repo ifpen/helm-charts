@@ -119,13 +119,17 @@ jobs:
 
             if [[ -n "$VERSION_SCRIPT" && -f "$VERSION_SCRIPT" ]]; then
               while IFS= read -r line; do
-                if [[ ! "$line" =~ ^[a-z_]+=[A-Za-z0-9._\ -]+$ ]]; then
+                if [[ ! "$line" =~ ^[a-z_]+=[^=[:cntrl:]]+$ ]]; then
                   echo "::error::Invalid metadata from $VERSION_SCRIPT: $line"
                   exit 1
                 fi
                 key="${line%%=*}"
                 value="${line#*=}"
                 if [[ "$key" == "image_tag" ]]; then
+                  if [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
+                    echo "::error::Invalid image_tag value from $VERSION_SCRIPT: $value"
+                    exit 1
+                  fi
                   IMAGE_TAG_BASE="$value"
                 fi
               done < <(bash "$VERSION_SCRIPT" "${{ matrix.image_dockerfile }}")
