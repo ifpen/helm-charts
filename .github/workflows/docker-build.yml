@@ -77,27 +77,51 @@ jobs:
 
       - name: Extract image metadata
         id: vars
+        env:
+          IMAGE_NAME: ${{ matrix.name }}
         run: |
-          IMAGE_NAME="${{ matrix.name }}"
           DOCKERFILE="${{ matrix.dockerfile }}"
 
-          VERSION=$(grep -E '^ARG [A-Za-z0-9_]+_VERSION=' "$DOCKERFILE" | head -n 1 | cut -d'=' -f2 | tr -d '" ')
-          if [[ -z "$VERSION" ]]; then
-            echo "::error::Unable to extract version from $DOCKERFILE"
+          FILESENDER_VERSION=$(grep -E '^ARG FILESENDER_VERSION=' "$DOCKERFILE" | head -n 1 | cut -d'=' -f2 | tr -d '" ')
+          if [[ -z "$FILESENDER_VERSION" ]]; then
+            echo "::error::Unable to extract FILESENDER_VERSION from $DOCKERFILE"
             exit 1
           fi
+
+          CHART_PATH=$(python3 - <<'PY'
+          import json
+          import os
+          image = os.environ['IMAGE_NAME']
+          with open('.github/config/charts.json', 'r', encoding='utf-8') as f:
+              charts = json.load(f)
+          linked = next((c for c in charts if c.get('image') == image), None)
+          print(linked.get('path') if linked else '')
+          PY
+          )
 
           if [[ "${{ github.ref_name }}" == "develop" ]]; then
             SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
             IMAGE_TAG="develop-${SHA_SHORT}-$(date +%Y%m%d%H%M%S)"
             IMAGE_TAGS="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${IMAGE_TAG}"
           else
-            IMAGE_TAG="$VERSION"
+            if [[ -z "$CHART_PATH" ]]; then
+              echo "::error::No chart linked to image $IMAGE_NAME in .github/config/charts.json"
+              exit 1
+            fi
+
+            CURRENT_VERSION=$(grep '^version:' "$CHART_PATH/Chart.yaml" | awk '{print $2}')
+            if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              IMAGE_TAG="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+            else
+              echo "::error::Chart version '$CURRENT_VERSION' is not in x.y.z format"
+              exit 1
+            fi
             IMAGE_TAGS="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${IMAGE_TAG}\nghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:latest"
           fi
 
           {
-            echo "version=$VERSION"
+            echo "filesender_version=$FILESENDER_VERSION"
+            echo "chart_path=$CHART_PATH"
             echo "image_tag=$IMAGE_TAG"
             echo "image_tags<<EOF"
             echo -e "$IMAGE_TAGS"
@@ -115,25 +139,14 @@ jobs:
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:buildcache,mode=max
 
       - name: Update linked chart
-        env:
-          IMAGE_NAME: ${{ matrix.name }}
         run: |
+          IMAGE_NAME="${{ matrix.name }}"
           IMAGE_TAG="${{ steps.vars.outputs.image_tag }}"
-          APP_VERSION="${{ steps.vars.outputs.version }}"
-
-          CHART_PATH=$(python3 - <<'PY'
-          import json
-          import os
-          image = os.environ['IMAGE_NAME']
-          with open('.github/config/charts.json', 'r', encoding='utf-8') as f:
-              charts = json.load(f)
-          linked = next((c for c in charts if c.get('image') == image), None)
-          print(linked.get('path') if linked else '')
-          PY
-          )
+          APP_VERSION="${{ steps.vars.outputs.filesender_version }}"
+          CHART_PATH="${{ steps.vars.outputs.chart_path }}"
 
           if [[ -z "$CHART_PATH" ]]; then
-            echo "No chart linked to image $IMAGE_NAME"
+            echo "No chart linked to image ${{ matrix.name }}"
             exit 0
           fi
 
@@ -141,14 +154,9 @@ jobs:
           VALUES_FILE="$CHART_PATH/values.yaml"
 
           sed -i -E "s/^appVersion: .*/appVersion: \"${APP_VERSION}\"/" "$CHART_FILE"
-
-          CURRENT_VERSION=$(grep '^version:' "$CHART_FILE" | awk '{print $2}')
-          if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            NEW_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
-          else
-            NEW_VERSION="$CURRENT_VERSION"
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            sed -i -E "s/^version: .*/version: ${IMAGE_TAG}/" "$CHART_FILE"
           fi
-          sed -i -E "s/^version: .*/version: ${NEW_VERSION}/" "$CHART_FILE"
 
           awk -v new_tag="$IMAGE_TAG" '
             BEGIN {updated=0}
