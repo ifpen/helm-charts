@@ -88,7 +88,8 @@ jobs:
           fi
 
           if [[ "${{ github.ref_name }}" == "develop" ]]; then
-            IMAGE_TAG="develop-${GITHUB_SHA:0:7}-$(date +%Y%m%d%H%M%S)"
+            SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+            IMAGE_TAG="develop-${SHA_SHORT}-$(date +%Y%m%d%H%M%S)"
             IMAGE_TAGS="ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${IMAGE_TAG}"
           else
             IMAGE_TAG="$VERSION"
