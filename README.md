@@ -53,3 +53,8 @@ helm uninstall <release-name>
 ## Licence
 
 Voir les licences individuelles de chaque chart pour plus de détails.
+
+## Convention de versioning
+
+Voir [docs/VERSIONING.md](docs/VERSIONING.md) pour la documentation complète sur
+la convention de versioning des images Docker et des charts Helm.

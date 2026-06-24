@@ -1,0 +1,190 @@
+name: Build Docker Images and Update Charts
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'docker/**'
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has_images: ${{ steps.set-matrix.outputs.has_images }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed images
+        id: set-matrix
+        run: |
+          # Lire le registre des images
+          IMAGES="$(cat .github/config/images.json)"
+
+          # Récupérer la liste des fichiers modifiés
+          CHANGED_FILES="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)"
+
+          MATRIX_ITEMS="[]"
+
+          while IFS= read -r image; do
+            NAME="$(echo "$image" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["name"])')"
+            FILTER="$(echo "$image" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["path_filter"])')"
+            CONTEXT="$(echo "$image" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["context"])')"
+            DOCKERFILE="$(echo "$image" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["dockerfile"])')"
+            VERSION_SCRIPT="$(echo "$image" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["version_script"])')"
+
+            # Convertir le path_filter glob en préfixe de répertoire pour comparaison
+            PREFIX="${FILTER%%\**}"
+
+            if echo "$CHANGED_FILES" | grep -q "^${PREFIX}"; then
+              ITEM="$(python3 -c "import json; print(json.dumps({'name': '${NAME}', 'context': '${CONTEXT}', 'dockerfile': '${DOCKERFILE}', 'version_script': '${VERSION_SCRIPT}'}))")"
+              MATRIX_ITEMS="$(python3 -c "import json,sys; items=json.loads('${MATRIX_ITEMS}'); items.append(${ITEM}); print(json.dumps(items))")"
+              echo "Image à construire : ${NAME}"
+            fi
+          done < <(cat .github/config/images.json | python3 -c 'import json,sys; [print(json.dumps(i)) for i in json.load(sys.stdin)]')
+
+          MATRIX="$(python3 -c "import json; print(json.dumps({'include': json.loads('${MATRIX_ITEMS}')}))")"
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$MATRIX_ITEMS" == "[]" ]]; then
+            echo "has_images=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_images=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: detect
+    if: needs.detect.outputs.has_images == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    strategy:
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute version metadata
+        id: versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x "${{ matrix.version_script }}"
+          # Le script émet des paires clé=valeur sur stdout
+          while IFS='=' read -r key value; do
+            echo "${key}=${value}" >> "$GITHUB_OUTPUT"
+          done < <("${{ matrix.version_script }}" "${{ matrix.dockerfile }}" | grep -v '^#')
+
+      - name: Set image tags (main — stable)
+        id: tags-main
+        if: github.ref_name == 'main'
+        run: |
+          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}"
+          echo "tags=${IMAGE_BASE}:${{ steps.versions.outputs.image_tag }},${IMAGE_BASE}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Set image tags (develop — preview)
+        id: tags-develop
+        if: github.ref_name == 'develop'
+        run: |
+          TIMESTAMP="$(date +%s)"
+          SHA7="${GITHUB_SHA::7}"
+          IMAGE_BASE="ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}"
+          echo "tags=${IMAGE_BASE}:develop-${SHA7}-${TIMESTAMP}" >> "$GITHUB_OUTPUT"
+          echo "dev_tag=develop-${SHA7}-${TIMESTAMP}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.context }}
+          file: ./${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ github.ref_name == 'main' && steps.tags-main.outputs.tags || steps.tags-develop.outputs.tags }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:buildcache,mode=max
+
+      - name: Find linked chart
+        id: linked-chart
+        run: |
+          # Trouver le chart dont le champ "image" correspond à matrix.name
+          CHART="$(python3 -c "
+          import json
+          charts = json.load(open('.github/config/charts.json'))
+          match = next((c for c in charts if c.get('image') == '${{ matrix.name }}'), None)
+          if match:
+              print(json.dumps(match))
+          ")"
+          if [[ -n "$CHART" ]]; then
+            CHART_NAME="$(echo "$CHART" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+            CHART_PATH="$(echo "$CHART" | python3 -c 'import json,sys; print(json.load(sys.stdin)["path"])')"
+            echo "chart_name=${CHART_NAME}" >> "$GITHUB_OUTPUT"
+            echo "chart_path=${CHART_PATH}" >> "$GITHUB_OUTPUT"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Sur main uniquement : mettre à jour le chart avec le nouveau tag d'image stable
+      - name: Update linked chart (main only)
+        if: github.ref_name == 'main' && steps.linked-chart.outputs.found == 'true'
+        run: |
+          CHART_FILE="${{ steps.linked-chart.outputs.chart_path }}/Chart.yaml"
+          VALUES_FILE="${{ steps.linked-chart.outputs.chart_path }}/values.yaml"
+          NEW_IMAGE_TAG="${{ steps.versions.outputs.image_tag }}"
+          NEW_CHART_VERSION="${{ steps.versions.outputs.chart_version }}"
+          NEW_APP_VERSION="${{ steps.versions.outputs.app_version }}"
+          DESC_SUFFIX="${{ steps.versions.outputs.description_suffix }}"
+
+          # Mise à jour de Chart.yaml
+          sed -i "s/^version: .*/version: ${NEW_CHART_VERSION}/" "${CHART_FILE}"
+          sed -i "s/^appVersion: .*/appVersion: \"${NEW_APP_VERSION}\"/" "${CHART_FILE}"
+          # Mise à jour de la description (uniquement la partie "FileSender vX.Y")
+          sed -i "s/FileSender v[0-9][0-9]*\.[0-9][0-9]*/FileSender v${NEW_APP_VERSION}/g" "${CHART_FILE}"
+
+          # Mise à jour du tag de l'image FileSender dans values.yaml
+          # (première occurrence de "  tag:" correspondant à image.tag, PAS postgresql)
+          sed -i '0,/^  tag: .*/{s/^  tag: .*/  tag: "'"${NEW_IMAGE_TAG}"'"/}' "${VALUES_FILE}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${CHART_FILE}" "${VALUES_FILE}"
+
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update ${{ steps.linked-chart.outputs.chart_name }} to image ${NEW_IMAGE_TAG} [skip ci]"
+            git push origin "${GITHUB_REF_NAME}"
+          fi
+
+      # Sur develop : mettre à jour uniquement le tag develop dans values.yaml (optionnel/informatif)
+      - name: Update image tag in values.yaml (develop only)
+        if: github.ref_name == 'develop' && steps.linked-chart.outputs.found == 'true'
+        run: |
+          VALUES_FILE="${{ steps.linked-chart.outputs.chart_path }}/values.yaml"
+          DEV_TAG="${{ steps.tags-develop.outputs.dev_tag }}"
+
+          sed -i '0,/^  tag: .*/{s/^  tag: .*/  tag: "'"${DEV_TAG}"'"/}' "${VALUES_FILE}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${VALUES_FILE}"
+
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update ${{ matrix.name }} dev image tag to ${DEV_TAG} [skip ci]"
+            git push origin "${GITHUB_REF_NAME}"
+          fi

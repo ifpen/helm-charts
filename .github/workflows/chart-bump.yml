@@ -1,0 +1,106 @@
+name: Bump Chart Version on Packaging Changes
+
+# Déclenché quand des fichiers de chart changent SANS changement d'image Docker.
+# Le bump image → chart est déjà géré par docker-build.yml.
+# Ce workflow couvre les cas : bump tag PostgreSQL, modif values.yaml ou templates.
+#
+# Anti-boucle : les commits d'auto-bump portent "[skip ci]". GitHub Actions ignore
+# automatiquement les pushes dont le message contient "[skip ci]", donc ce workflow
+# ne se relancera pas sur ses propres commits.
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'charts/**'
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has_charts: ${{ steps.set-matrix.outputs.has_charts }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed charts (packaging only)
+        id: set-matrix
+        run: |
+          # Récupérer les fichiers modifiés dans ce push
+          CHANGED_FILES="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)"
+
+          # Si des fichiers docker/** ont changé, docker-build.yml gère déjà le bump
+          if echo "$CHANGED_FILES" | grep -q '^docker/'; then
+            echo "Changements Docker détectés — bump géré par docker-build.yml"
+            echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+            echo "has_charts=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          MATRIX_ITEMS="[]"
+
+          while IFS= read -r chart; do
+            NAME="$(echo "$chart" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["name"])')"
+            FILTER="$(echo "$chart" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["path_filter"])')"
+            CHART_PATH="$(echo "$chart" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["path"])')"
+
+            PREFIX="${FILTER%%\**}"
+
+            if echo "$CHANGED_FILES" | grep -q "^${PREFIX}"; then
+              ITEM="$(python3 -c "import json; print(json.dumps({'name': '${NAME}', 'path': '${CHART_PATH}'}))")"
+              MATRIX_ITEMS="$(python3 -c "import json,sys; items=json.loads('${MATRIX_ITEMS}'); items.append(${ITEM}); print(json.dumps(items))")"
+              echo "Chart à bumper : ${NAME}"
+            fi
+          done < <(cat .github/config/charts.json | python3 -c 'import json,sys; [print(json.dumps(i)) for i in json.load(sys.stdin)]')
+
+          MATRIX="$(python3 -c "import json; print(json.dumps({'include': json.loads('${MATRIX_ITEMS}')}))")"
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$MATRIX_ITEMS" == "[]" ]]; then
+            echo "has_charts=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_charts=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  bump:
+    needs: detect
+    if: needs.detect.outputs.has_charts == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bump chart patch version
+        run: |
+          CHART_FILE="${{ matrix.path }}/Chart.yaml"
+
+          CURRENT_VERSION="$(grep '^version:' "${CHART_FILE}" | awk '{print $2}')"
+          BASE_XY="$(echo "${CURRENT_VERSION}" | cut -d'.' -f1-2)"
+          CURRENT_PATCH="$(echo "${CURRENT_VERSION}" | cut -d'.' -f3)"
+          NEW_PATCH=$((CURRENT_PATCH + 1))
+          NEW_VERSION="${BASE_XY}.${NEW_PATCH}"
+
+          sed -i "s/^version: .*/version: ${NEW_VERSION}/" "${CHART_FILE}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${CHART_FILE}"
+
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bump ${{ matrix.name }} chart to ${NEW_VERSION} (packaging) [skip ci]"
+            git push origin "${GITHUB_REF_NAME}"
+            echo "Chart ${{ matrix.name }} bumpé : ${CURRENT_VERSION} → ${NEW_VERSION}"
+          else
+            echo "Pas de changement à committer pour ${{ matrix.name }}"
+          fi
