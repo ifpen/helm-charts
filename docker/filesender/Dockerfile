@@ -5,7 +5,7 @@ FROM php:8.5.7-fpm-alpine3.22 AS builder
 
 # Arguments de build
 ARG FILESENDER_VERSION=3.10
-ARG SIMPLESAMLPHP_VERSION=2.4.5
+ARG SIMPLESAMLPHP_VERSION=2.5.2
 ARG AWS_SDK_PHP_VERSION=3.371.4
 
 # Installation des dépendances de build
