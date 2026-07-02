@@ -70,9 +70,9 @@ jobs:
                 'chart_name': '${CHART_NAME}',
                 'chart_path': '${CHART_PATH}',
                 'linked_image': '${LINKED_IMAGE}',
-                'image_changed': ${IMAGE_CHANGED}
+                'image_changed': '${IMAGE_CHANGED}' == 'true'
               }))")"
-              MATRIX_ITEMS="$(python3 -c "import json; items=json.loads('${MATRIX_ITEMS}'); items.append(${ITEM}); print(json.dumps(items))")"
+              MATRIX_ITEMS="$(python3 -c "import json; items=json.loads('${MATRIX_ITEMS}'); items.append(json.loads('${ITEM}')); print(json.dumps(items))")"
               echo "Chart RC à publier : ${CHART_NAME} (chart_changed=${CHART_CHANGED}, image_changed=${IMAGE_CHANGED})"
             fi
           done < <(echo "$CHARTS" | python3 -c 'import json,sys; [print(json.dumps(i)) for i in json.load(sys.stdin)]')
