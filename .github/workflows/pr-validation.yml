@@ -60,10 +60,12 @@ jobs:
           CHARTS_MATRIX="$(python3 -c "import json; print(json.dumps({'include': json.loads('${CHARTS_ITEMS}')}))")"
           IMAGES_MATRIX="$(python3 -c "import json; print(json.dumps({'include': json.loads('${IMAGES_ITEMS}')}))")"
 
-          echo "charts_matrix=${CHARTS_MATRIX}" >> "$GITHUB_OUTPUT"
-          echo "images_matrix=${IMAGES_MATRIX}" >> "$GITHUB_OUTPUT"
-          echo "has_charts=$([[ "${CHARTS_ITEMS}" != "[]" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "has_images=$([[ "${IMAGES_ITEMS}" != "[]" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          {
+            echo "charts_matrix=${CHARTS_MATRIX}"
+            echo "images_matrix=${IMAGES_MATRIX}"
+            echo "has_charts=$([[ "${CHARTS_ITEMS}" != "[]" ]] && echo true || echo false)"
+            echo "has_images=$([[ "${IMAGES_ITEMS}" != "[]" ]] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
 
   lint-charts:
     needs: detect

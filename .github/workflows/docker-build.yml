@@ -25,9 +25,6 @@ jobs:
       - name: Detect changed images
         id: set-matrix
         run: |
-          # Lire le registre des images
-          IMAGES="$(cat .github/config/images.json)"
-
           # Récupérer la liste des fichiers modifiés
           CHANGED_FILES="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)"
 
@@ -134,9 +131,11 @@ jobs:
           if [[ -n "$CHART" ]]; then
             CHART_NAME="$(echo "$CHART" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
             CHART_PATH="$(echo "$CHART" | python3 -c 'import json,sys; print(json.load(sys.stdin)["path"])')"
-            echo "chart_name=${CHART_NAME}" >> "$GITHUB_OUTPUT"
-            echo "chart_path=${CHART_PATH}" >> "$GITHUB_OUTPUT"
-            echo "found=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "chart_name=${CHART_NAME}"
+              echo "chart_path=${CHART_PATH}"
+              echo "found=true"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
@@ -150,7 +149,6 @@ jobs:
           NEW_IMAGE_TAG="${{ steps.versions.outputs.image_tag }}"
           NEW_CHART_VERSION="${{ steps.versions.outputs.chart_version }}"
           NEW_APP_VERSION="${{ steps.versions.outputs.app_version }}"
-          DESC_SUFFIX="${{ steps.versions.outputs.description_suffix }}"
 
           # Mise à jour de Chart.yaml
           sed -i "s/^version: .*/version: ${NEW_CHART_VERSION}/" "${CHART_FILE}"

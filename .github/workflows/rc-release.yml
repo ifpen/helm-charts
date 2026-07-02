@@ -121,7 +121,7 @@ jobs:
             | grep -v '\-rc\.' | sort -V | tail -1)"
 
           if [[ -n "$LATEST_STABLE" ]]; then
-            LAST_PATCH="$(echo "$LATEST_STABLE" | sed "s/${CHART_NAME}-${MAJOR_MINOR}\.//")"
+            LAST_PATCH="${LATEST_STABLE#${CHART_NAME}-${MAJOR_MINOR}.}"
             NEW_PATCH=$((LAST_PATCH + 1))
           else
             NEW_PATCH=0
@@ -172,10 +172,12 @@ jobs:
           RC_IMAGE_TAG="${image_tag}-rc.${{ steps.rc-version.outputs.rc_num }}"
           RC_IMAGE="ghcr.io/${{ github.repository_owner }}/${{ matrix.linked_image }}:${RC_IMAGE_TAG}"
 
-          echo "rc_image_tag=${RC_IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "rc_image=${RC_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "context=${CONTEXT}" >> "$GITHUB_OUTPUT"
-          echo "dockerfile=${DOCKERFILE}" >> "$GITHUB_OUTPUT"
+          {
+            echo "rc_image_tag=${RC_IMAGE_TAG}"
+            echo "rc_image=${RC_IMAGE}"
+            echo "context=${CONTEXT}"
+            echo "dockerfile=${DOCKERFILE}"
+          } >> "$GITHUB_OUTPUT"
           echo "🐳 Image Docker RC : ${RC_IMAGE}"
 
       - name: Login to GitHub Container Registry
