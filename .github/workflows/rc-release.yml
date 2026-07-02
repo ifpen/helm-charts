@@ -121,7 +121,8 @@ jobs:
             | grep -v '\-rc\.' | sort -V | tail -1)"
 
           if [[ -n "$LATEST_STABLE" ]]; then
-            LAST_PATCH="${LATEST_STABLE#${CHART_NAME}-${MAJOR_MINOR}.}"
+            _prefix="${CHART_NAME}-${MAJOR_MINOR}."
+            LAST_PATCH="${LATEST_STABLE#${_prefix}}"
             NEW_PATCH=$((LAST_PATCH + 1))
           else
             NEW_PATCH=0
