@@ -189,4 +189,15 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/svc-mongodb-0.1.0-rc.1/svc-mongodb-0.1.0-rc.1.tgz
     version: 0.1.0-rc.1
-generated: "2026-09-02T15:00:05.606414454Z"
+  webcomponent:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2026-09-02T15:11:21.241872964Z"
+    description: Fast-IT Helm Chart for WebComponents, used in WebApps and WebServices
+    digest: b65c9467d7cb8ba4de2d19da2d103dfec1d3b1a9f8255b410725fa1b73161290
+    name: webcomponent
+    type: application
+    urls:
+    - https://github.com/ifpen/helm-charts/releases/download/webcomponent-0.1.0-rc.1/webcomponent-0.1.0-rc.1.tgz
+    version: 0.1.0-rc.1
+generated: "2026-09-02T15:11:21.241198997Z"
