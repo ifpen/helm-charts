@@ -1,15 +1,15 @@
 dependencies:
 - name: webcomponent
-  repository: file://../webcomponent
-  version: 0.1.0
+  repository: https://ifpen.github.io/helm-charts
+  version: 0.1.0-rc.1
 - name: webcomponent
-  repository: file://../webcomponent
-  version: 0.1.0
+  repository: https://ifpen.github.io/helm-charts
+  version: 0.1.0-rc.1
 - name: svc-postgres
-  repository: file://../svc-postgres
-  version: 0.1.0
+  repository: https://ifpen.github.io/helm-charts
+  version: 0.1.0-rc.1
 - name: svc-mongodb
-  repository: file://../svc-mongodb
-  version: 0.1.0
-digest: sha256:8ac91ad6fe32c2fa0d773f67155c69efd66df6e64405c40ead7b5b668797a66e
-generated: "2026-09-02T05:35:56.731562093Z"
+  repository: https://ifpen.github.io/helm-charts
+  version: 0.1.0-rc.2
+digest: sha256:1539094d846e74c13ff964610135cfe384d9aae58db52005e50d78a26d30df97
+generated: "2026-09-02T18:04:28.5698955+02:00"
