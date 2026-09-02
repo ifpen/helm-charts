@@ -1,4 +1,4 @@
-{{- if and .Values.global.postgres.enabled (not .Values.postgres.cluster.createSecret) -}}
+{{- if and .Values.postgres.enabled (not .Values.postgres.cluster.createSecret) -}}
 ---
 apiVersion: v1
 kind: Secret

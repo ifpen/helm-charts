@@ -4,5 +4,20 @@
     "path": "charts/filesender",
     "image": "filesender",
     "path_filter": "charts/filesender/**"
+  },
+  {
+    "name": "webcomponent",
+    "path": "charts/webcomponent",
+    "path_filter": "charts/webcomponent/**"
+  },
+  {
+    "name": "svc-postgres",
+    "path": "charts/svc-postgres",
+    "path_filter": "charts/svc-postgres/**"
+  },
+  {
+    "name": "svc-mongodb",
+    "path": "charts/svc-mongodb",
+    "path_filter": "charts/svc-mongodb/**"
   }
 ]

@@ -5,9 +5,6 @@ global:
   domain: "example.com"
   ingressClassName: "nginx"
 
-  postgres:
-    enabled: false
-
 #
 # Dependency Webcomponents
 #
@@ -49,6 +46,7 @@ webapp:
     annotations: {}
 
 postgres:
+  enabled: false
   cluster:
     createSecret: false
   ingress:

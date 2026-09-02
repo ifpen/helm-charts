@@ -18,7 +18,7 @@ dependencies:
     alias: postgres
     version: 0.1.0
     repository: file://../svc-postgres
-    condition: global.postgres.enabled
+    condition: postgres.enabled
   - name: svc-mongodb
     alias: mongodb
     version: 0.1.0
