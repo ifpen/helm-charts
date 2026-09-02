@@ -177,4 +177,16 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/filesender-3.5.2/filesender-3.5.2.tgz
     version: 3.5.2
-generated: "2026-09-02T14:26:32.647857787Z"
+  svc-mongodb:
+  - apiVersion: v2
+    appVersion: "1"
+    created: "2026-09-02T15:00:05.607054127Z"
+    description: Fast-IT Helm Chart for a MongoDB cluster alongside Mongo Express
+      for external access
+    digest: 237f94fd27706f2bb9c81d1fd87793819b7695033708b99d53761e6ec2cf7444
+    name: svc-mongodb
+    type: application
+    urls:
+    - https://github.com/ifpen/helm-charts/releases/download/svc-mongodb-0.1.0-rc.1/svc-mongodb-0.1.0-rc.1.tgz
+    version: 0.1.0-rc.1
+generated: "2026-09-02T15:00:05.606414454Z"
