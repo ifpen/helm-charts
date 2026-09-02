@@ -5,17 +5,95 @@ on:
     branches:
       - main
     types: [opened, synchronize, reopened]
+    paths:
+      - 'charts/**'
+      - 'docker/**'
 
 jobs:
-  rc-release:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      has_charts: ${{ steps.detect.outputs.has_charts }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect affected charts
+        id: detect
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED_FILES="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"
+
+          # Charger les registres
+          CHARTS="$(cat .github/config/charts.json)"
+          IMAGES="$(cat .github/config/images.json)"
+
+          MATRIX_ITEMS="[]"
+
+          while IFS= read -r chart; do
+            CHART_NAME="$(echo "$chart" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["name"])')"
+            CHART_PATH="$(echo "$chart" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["path"])')"
+            CHART_FILTER="$(echo "$chart" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["path_filter"])')"
+            LINKED_IMAGE="$(echo "$chart" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("image",""))')"
+
+            CHART_PREFIX="${CHART_FILTER%%\**}"
+            CHART_CHANGED=false
+            IMAGE_CHANGED=false
+
+            # Vérifier si le chart lui-même a changé
+            if echo "$CHANGED_FILES" | grep -q "^${CHART_PREFIX}"; then
+              CHART_CHANGED=true
+            fi
+
+            # Vérifier si l'image liée a changé
+            if [[ -n "$LINKED_IMAGE" ]]; then
+              IMAGE_FILTER="$(echo "$IMAGES" | python3 -c "
+          import json,sys
+          images = json.load(sys.stdin)
+          match = next((i for i in images if i['name'] == '${LINKED_IMAGE}'), None)
+          print(match['path_filter'] if match else '')
+          ")"
+              IMAGE_PREFIX="${IMAGE_FILTER%%\**}"
+              if [[ -n "$IMAGE_PREFIX" ]] && echo "$CHANGED_FILES" | grep -q "^${IMAGE_PREFIX}"; then
+                IMAGE_CHANGED=true
+              fi
+            fi
+
+            if [[ "$CHART_CHANGED" == "true" || "$IMAGE_CHANGED" == "true" ]]; then
+              ITEM="$(python3 -c "import json; print(json.dumps({
+                'chart_name': '${CHART_NAME}',
+                'chart_path': '${CHART_PATH}',
+                'linked_image': '${LINKED_IMAGE}',
+                'image_changed': '${IMAGE_CHANGED}' == 'true'
+              }))")"
+              MATRIX_ITEMS="$(python3 -c "import json; items=json.loads('${MATRIX_ITEMS}'); items.append(json.loads('${ITEM}')); print(json.dumps(items))")"
+              echo "Chart RC à publier : ${CHART_NAME} (chart_changed=${CHART_CHANGED}, image_changed=${IMAGE_CHANGED})"
+            fi
+          done < <(echo "$CHARTS" | python3 -c 'import json,sys; [print(json.dumps(i)) for i in json.load(sys.stdin)]')
+
+          MATRIX="$(python3 -c "import json; print(json.dumps({'include': json.loads('${MATRIX_ITEMS}')}))")"
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "has_charts=$([[ "${MATRIX_ITEMS}" != "[]" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  rc:
+    needs: detect
+    if: needs.detect.outputs.has_charts == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
       pull-requests: write
+    strategy:
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -24,108 +102,142 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Lint Helm chart
-        run: helm lint charts/filesender
+        run: helm lint ${{ matrix.chart_path }}
 
       - name: Template Helm chart
-        run: helm template charts/filesender
+        run: helm template ${{ matrix.chart_path }}
 
-      - name: Determine RC version and detect Docker changes
+      - name: Determine RC version
         id: rc-version
         run: |
-          CHART_VERSION=$(grep '^version:' charts/filesender/Chart.yaml | awk '{print $2}')
-          echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
+          CHART_NAME="${{ matrix.chart_name }}"
 
-          COMMITS_AHEAD=$(git rev-list --count origin/main..HEAD)
+          # La version RC est basée sur la version du CHART (pas du tag d'image)
+          CHART_VERSION="$(grep '^version:' "${{ matrix.chart_path }}/Chart.yaml" | awk '{print $2}')"
+          MAJOR_MINOR="$(echo "${CHART_VERSION}" | cut -d'.' -f1-2)"
 
-          RC_VERSION="${CHART_VERSION}-rc.${COMMITS_AHEAD}"
-          echo "rc_version=${RC_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "📦 Version RC: ${RC_VERSION}"
+          # Trouver le dernier tag stable correspondant à MAJOR.MINOR (sans rc)
+          LATEST_STABLE="$(git tag -l "${CHART_NAME}-${MAJOR_MINOR}.*" \
+            | grep -v '\-rc\.' | sort -V | tail -1)"
 
-          # Detect if docker/filesender files changed compared to main
-          if git diff --name-only origin/main...HEAD -- docker/filesender/ | grep -q .; then
-            echo "docker_changed=true" >> "$GITHUB_OUTPUT"
-            echo "🐳 Changements Docker détectés"
-
-            # Extract Docker image metadata from Dockerfile
-            FS_VERSION=$(grep 'ARG FILESENDER_VERSION=' docker/filesender/Dockerfile | head -n 1 | cut -d'=' -f2 | tr -d '"' | tr -d ' ')
-            PHP_IMAGE=$(grep '^FROM php:' docker/filesender/Dockerfile | head -n 1 | awk '{print $2}')
-            PHP_VERSION=$(echo "$PHP_IMAGE" | cut -d':' -f2 | cut -d'-' -f1)
-
-            if [[ -z "$FS_VERSION" || -z "$PHP_VERSION" ]]; then
-              echo "::error::Impossible d'extraire les versions depuis le Dockerfile"
-              exit 1
-            fi
-
-            BASE_TAG="${FS_VERSION}-php${PHP_VERSION}"
-            RC_IMAGE_TAG="${BASE_TAG}-rc.${COMMITS_AHEAD}"
-            RC_IMAGE="ghcr.io/${{ github.repository_owner }}/filesender:${RC_IMAGE_TAG}"
-            echo "rc_image_tag=${RC_IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-            echo "rc_image=${RC_IMAGE}" >> "$GITHUB_OUTPUT"
-            echo "🐳 Image Docker RC: ${RC_IMAGE}"
+          if [[ -n "$LATEST_STABLE" ]]; then
+            _prefix="${CHART_NAME}-${MAJOR_MINOR}."
+            LAST_PATCH="${LATEST_STABLE#"${_prefix}"}"
+            NEW_PATCH=$((LAST_PATCH + 1))
           else
-            echo "docker_changed=false" >> "$GITHUB_OUTPUT"
-            echo "rc_image_tag=" >> "$GITHUB_OUTPUT"
-            echo "rc_image=" >> "$GITHUB_OUTPUT"
-            echo "🐳 Pas de changements Docker"
+            NEW_PATCH=0
           fi
 
+          BASE_VERSION="${MAJOR_MINOR}.${NEW_PATCH}"
+          echo "chart_version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+
+          # Calculer le numéro de RC
+          LAST_RC="$(git tag -l "${CHART_NAME}-${BASE_VERSION}-rc.*" \
+            | grep -oE '[0-9]+$' | sort -n | tail -1)"
+
+          RC_NUM="${LAST_RC:+$((LAST_RC + 1))}"
+          RC_NUM="${RC_NUM:-1}"
+
+          RC_VERSION="${BASE_VERSION}-rc.${RC_NUM}"
+          echo "rc_version=${RC_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "rc_num=${RC_NUM}" >> "$GITHUB_OUTPUT"
+          echo "📦 Version RC : ${RC_VERSION}"
+
+      - name: Build Docker RC image
+        id: rc-image
+        if: matrix.image_changed == true && matrix.linked_image != ''
+        run: |
+          # Extraire les métadonnées de version depuis le script dédié
+          IMAGE_ENTRY="$(python3 -c "
+          import json
+          images = json.load(open('.github/config/images.json'))
+          match = next((i for i in images if i['name'] == '${{ matrix.linked_image }}'), None)
+          print(json.dumps(match) if match else '')
+          ")"
+
+          if [[ -z "$IMAGE_ENTRY" ]]; then
+            echo "::error::Image ${{ matrix.linked_image }} introuvable dans images.json" >&2
+            exit 1
+          fi
+
+          DOCKERFILE="$(echo "$IMAGE_ENTRY" | python3 -c 'import json,sys; print(json.load(sys.stdin)["dockerfile"])')"
+          VERSION_SCRIPT="$(echo "$IMAGE_ENTRY" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version_script"])')"
+          CONTEXT="$(echo "$IMAGE_ENTRY" | python3 -c 'import json,sys; print(json.load(sys.stdin)["context"])')"
+
+          chmod +x "${VERSION_SCRIPT}"
+          while IFS='=' read -r key value; do
+            echo "${key}=${value}" >> "$GITHUB_OUTPUT"
+            declare "${key}=${value}"
+          done < <("${VERSION_SCRIPT}" "${DOCKERFILE}" | grep -v '^#')
+
+          RC_IMAGE_TAG="${image_tag}-rc.${{ steps.rc-version.outputs.rc_num }}"
+          RC_IMAGE="ghcr.io/${{ github.repository_owner }}/${{ matrix.linked_image }}:${RC_IMAGE_TAG}"
+
+          {
+            echo "rc_image_tag=${RC_IMAGE_TAG}"
+            echo "rc_image=${RC_IMAGE}"
+            echo "context=${CONTEXT}"
+            echo "dockerfile=${DOCKERFILE}"
+          } >> "$GITHUB_OUTPUT"
+          echo "🐳 Image Docker RC : ${RC_IMAGE}"
+
       - name: Login to GitHub Container Registry
-        if: steps.rc-version.outputs.docker_changed == 'true'
-        uses: docker/login-action@v4
+        if: matrix.image_changed == true && matrix.linked_image != ''
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker RC image
-        if: steps.rc-version.outputs.docker_changed == 'true'
+      - name: Push Docker RC image
+        if: matrix.image_changed == true && matrix.linked_image != ''
         uses: docker/build-push-action@v6
         with:
-          context: ./docker/filesender
+          context: ./${{ steps.rc-image.outputs.context }}
+          file: ./${{ steps.rc-image.outputs.dockerfile }}
           push: true
-          tags: ${{ steps.rc-version.outputs.rc_image }}
+          tags: ${{ steps.rc-image.outputs.rc_image }}
 
-      - name: Build RC Helm package
+      - name: Package RC Helm chart
         run: |
           RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
+          CHART_NAME="${{ matrix.chart_name }}"
 
-          cp -r charts/filesender /tmp/filesender-rc
-          sed -i "s/^version: .*/version: ${RC_VERSION}/" /tmp/filesender-rc/Chart.yaml
+          mkdir -p /tmp/helm-packages
+          cp -r "${{ matrix.chart_path }}" "/tmp/${CHART_NAME}-rc"
+          sed -i "s/^version: .*/version: ${RC_VERSION}/" "/tmp/${CHART_NAME}-rc/Chart.yaml"
 
-          # If a Docker RC image was built, update values.yaml to use it
-          if [[ "${{ steps.rc-version.outputs.docker_changed }}" == "true" ]]; then
-            RC_IMAGE_TAG="${{ steps.rc-version.outputs.rc_image_tag }}"
-            # Replace the first occurrence of '  tag:' in values.yaml (image.tag)
-            sed -i '0,/^  tag: .*/{s/^  tag: .*/  tag: "'"${RC_IMAGE_TAG}"'"/}' /tmp/filesender-rc/values.yaml
+          # Si une image Docker RC a été construite, mettre à jour son tag dans values.yaml
+          if [[ "${{ matrix.image_changed }}" == "true" && -n "${{ steps.rc-image.outputs.rc_image_tag }}" ]]; then
+            RC_IMAGE_TAG="${{ steps.rc-image.outputs.rc_image_tag }}"
+            sed -i '0,/^  tag: .*/{s/^  tag: .*/  tag: "'"${RC_IMAGE_TAG}"'"/}' \
+              "/tmp/${CHART_NAME}-rc/values.yaml"
             echo "🐳 values.yaml mis à jour avec l'image RC: ${RC_IMAGE_TAG}"
           fi
 
-          helm package /tmp/filesender-rc -d /tmp/helm-packages/
-          echo "📦 Package créé : filesender-${RC_VERSION}.tgz"
+          helm package "/tmp/${CHART_NAME}-rc" -d /tmp/helm-packages/
+          echo "📦 Package créé : ${CHART_NAME}-${RC_VERSION}.tgz"
 
       - name: Generate RC changelog
         id: changelog
         run: |
           RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
+          CHART_NAME="${{ matrix.chart_name }}"
 
-          # Find the previous RC tag for changelog comparison (exclude current RC version)
-          PREV_RC_TAG=$(git for-each-ref --sort=-creatordate --format='%(refname:short)' refs/tags \
-            | grep '^filesender-.*-rc\.' | grep -v "filesender-${RC_VERSION}$" | head -1)
+          PREV_RC_TAG="$(git for-each-ref --sort=-creatordate --format='%(refname:short)' refs/tags \
+            | grep "^${CHART_NAME}-.*-rc\." | grep -v "${CHART_NAME}-${RC_VERSION}$" | head -1)"
 
-          if [ -n "$PREV_RC_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "${PREV_RC_TAG}..HEAD")
+          if [[ -n "$PREV_RC_TAG" ]]; then
+            CHANGELOG="$(git log --pretty=format:"- %s (%h)" "${PREV_RC_TAG}..HEAD")"
             COMPARE_REF="$PREV_RC_TAG"
           else
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "origin/main..HEAD")
+            CHANGELOG="$(git log --pretty=format:"- %s (%h)" "origin/main..HEAD")"
             COMPARE_REF="main"
           fi
 
-          if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="- No changes"
-          fi
+          [[ -z "$CHANGELOG" ]] && CHANGELOG="- No changes"
 
-          # Write notes to a temp file for multi-line support
-          NOTES_FILE=$(mktemp)
+          NOTES_FILE="$(mktemp)"
           {
             echo "## 📦 RC \`${RC_VERSION}\` from PR #${{ github.event.pull_request.number }}"
             echo ""
@@ -141,51 +253,49 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
-          TAG="filesender-${RC_VERSION}"
-          TGZ_FILE="/tmp/helm-packages/filesender-${RC_VERSION}.tgz"
+          CHART_NAME="${{ matrix.chart_name }}"
+          TAG="${CHART_NAME}-${RC_VERSION}"
+          TGZ_FILE="/tmp/helm-packages/${CHART_NAME}-${RC_VERSION}.tgz"
 
-          # Delete existing release with same tag if re-running
           gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
           git push --delete origin "${TAG}" 2>/dev/null || true
           git tag -d "${TAG}" 2>/dev/null || true
 
-          # Create a tag at the PR head commit
           git tag "${TAG}"
           git push origin "${TAG}"
 
-          # Create pre-release with chart package as asset and changelog
           gh release create "${TAG}" "${TGZ_FILE}" \
             --prerelease \
-            --title "filesender-${RC_VERSION}" \
+            --title "${TAG}" \
             --notes-file "${{ steps.changelog.outputs.notes_file }}"
 
       - name: Clean up old RC pre-releases (keep last 3)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # List all RC pre-releases sorted by creation date (newest first), skip the 3 most recent
+          CHART_NAME="${{ matrix.chart_name }}"
           gh release list --limit 100 --json tagName,isPrerelease,createdAt \
-            --jq '[.[] | select(.isPrerelease) | select(.tagName | test("-rc\\."))] | sort_by(.createdAt) | reverse | .[3:] | .[].tagName' \
+            --jq "[.[] | select(.isPrerelease) | select(.tagName | test(\"^${CHART_NAME}-.*-rc\\\\.\"))] | sort_by(.createdAt) | reverse | .[3:] | .[].tagName" \
             | while read -r tag; do
-                echo "Deleting old RC release: ${tag}"
+                echo "Suppression de l'ancienne RC: ${tag}"
                 gh release delete "${tag}" --yes --cleanup-tag
               done
 
       - name: Update Helm repo index on gh-pages
         run: |
           RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
-          TAG="filesender-${RC_VERSION}"
+          CHART_NAME="${{ matrix.chart_name }}"
+          TAG="${CHART_NAME}-${RC_VERSION}"
 
           git clone --branch gh-pages --single-branch \
             "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
             /tmp/gh-pages
 
-          # Generate index entry with release asset URL and merge with existing index
           mkdir -p /tmp/rc-index
-          cp /tmp/helm-packages/filesender-${RC_VERSION}.tgz /tmp/rc-index/
+          cp "/tmp/helm-packages/${CHART_NAME}-${RC_VERSION}.tgz" /tmp/rc-index/
 
           cd /tmp/gh-pages
-          if [ -f index.yaml ]; then
+          if [[ -f index.yaml ]]; then
             helm repo index /tmp/rc-index \
               --url "https://github.com/${{ github.repository }}/releases/download/${TAG}" \
               --merge index.yaml
@@ -207,11 +317,12 @@ jobs:
           script: |
             const rcVersion = '${{ steps.rc-version.outputs.rc_version }}';
             const chartVersion = '${{ steps.rc-version.outputs.chart_version }}';
-            const dockerChanged = '${{ steps.rc-version.outputs.docker_changed }}' === 'true';
-            const rcImage = '${{ steps.rc-version.outputs.rc_image }}';
+            const chartName = '${{ matrix.chart_name }}';
+            const imageChanged = '${{ matrix.image_changed }}' === 'true';
+            const rcImage = '${{ steps.rc-image.outputs.rc_image }}';
 
             let dockerSection = '';
-            if (dockerChanged) {
+            if (imageChanged && rcImage) {
               dockerSection = `
             ### 🐳 Image Docker RC
             | | |
@@ -225,24 +336,24 @@ jobs:
             `;
             }
 
-            const body = `## 🏷️ Version RC publiée
+            const body = `## 🏷️ Version RC publiée — ${chartName}
 
             | | |
             |---|---|
             | **Chart RC** | \`${rcVersion}\` |
             | **Version finale prévue** | \`${chartVersion}\` |
             | **FileSender** | \`${chartVersion.split('.').slice(0,2).join('.')}\` |
-            ${dockerChanged ? `| **Image Docker RC** | \`${rcImage}\` |` : ''}
+            ${imageChanged && rcImage ? `| **Image Docker RC** | \`${rcImage}\` |` : ''}
 
             ### Installation pour test
             \`\`\`bash
             helm repo update ifpen
-            helm install filesender-rc ifpen/filesender --version ${rcVersion}
+            helm install ${chartName}-rc ifpen/${chartName} --version ${rcVersion}
             \`\`\`
             ${dockerSection}
             ### Vérification
             \`\`\`bash
-            helm search repo ifpen/filesender --versions --devel
+            helm search repo ifpen/${chartName} --versions --devel
             \`\`\`
 
             > ⚠️ Cette version RC sera remplacée par la version stable \`${chartVersion}\` lors du merge.
@@ -254,8 +365,9 @@ jobs:
               issue_number: context.issue.number,
             });
 
+            const marker = `Version RC publiée — ${chartName}`;
             const botComment = comments.find(c =>
-              c.user.type === 'Bot' && c.body.includes('Version RC publiée')
+              c.user.type === 'Bot' && c.body.includes(marker)
             );
 
             if (botComment) {

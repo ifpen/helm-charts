@@ -1,0 +1,43 @@
+name: CI — Lint GitHub Actions
+
+# Déclenché uniquement sur des changements dans .github/
+# N'effectue aucun build d'image ni de release.
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - '.github/**'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/**'
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: rhysd/actionlint@v1.7.12
+        with:
+          # Lint tous les fichiers de workflow
+          files: .github/workflows/*.yml
+
+      - name: Check shell scripts (shellcheck)
+        run: |
+          if command -v shellcheck &>/dev/null; then
+            find .github/scripts -name '*.sh' -exec shellcheck {} +
+          else
+            echo "shellcheck non disponible, installation..."
+            sudo apt-get install -y --no-install-recommends shellcheck
+            find .github/scripts -name '*.sh' -exec shellcheck {} +
+          fi
