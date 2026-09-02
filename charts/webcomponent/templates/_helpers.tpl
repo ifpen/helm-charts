@@ -60,3 +60,54 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+
+{{- define "webcomponent.configmapName" -}}
+{{- printf "%s-config" (include "webcomponent.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "webcomponent.secretName" -}}
+{{- printf "%s-config-sec" (include "webcomponent.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+
+## INGRESS CONFIG
+{{/*
+Return the automatically generated ingress host.
+
+Returns an empty string when auto ingress is not active.
+
+Example:
+  toto-back.example.com
+*/}}
+{{- define "webcomponent.autoIngressHost" -}}
+{{- if and .Values.ingress.enabled .Values.ingress.auto -}}
+  {{- $tld := .Values.ingress.autoTld | default .Values.global.domain -}}
+  {{- $tld = required "ingress.autoTld or global.domain must be set when ingress.auto is enabled" $tld -}}
+  {{- printf "%s.%s" (include "webcomponent.fullname" .) $tld -}}
+{{- end -}}
+{{- end -}}
+
+
+{{/*
+Build the complete ingress hosts list.
+
+The automatically generated host is prepended to manually configured
+hosts when automatic ingress is enabled.
+*/}}
+{{- define "webcomponent.ingressHosts" -}}
+{{- $hosts := .Values.ingress.hosts | default (list) -}}
+
+{{- $autoHost := include "webcomponent.autoIngressHost" . | trim -}}
+{{- if $autoHost -}}
+  {{- $hosts = prepend $hosts (dict
+      "host" $autoHost
+      "paths" (list (dict
+        "path" "/"
+        "pathType" "Prefix"
+      ))
+  ) -}}
+{{- end -}}
+
+{{- toYaml $hosts -}}
+{{- end -}}

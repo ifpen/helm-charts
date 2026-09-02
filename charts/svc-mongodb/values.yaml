@@ -73,27 +73,35 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
-    path: /
+    path: /status
     port: http
+    scheme: HTTP
+  initialDelaySeconds: 60
+  timeoutSeconds: 5
+  periodSeconds: 10
+  successThreshold: 1
+  failureThreshold: 3
 readinessProbe:
   httpGet:
-    path: /
-    port: http
+    path: /status
+    port: mongo-express
+    scheme: HTTP
+  initialDelaySeconds: 60
+  timeoutSeconds: 5
+  periodSeconds: 10
+  successThreshold: 1
+  failureThreshold: 3
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -121,3 +129,29 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+
+
+monit:
+  enabled: true
+  createSecret: true
+  promUsername: promUsername
+  promPassword: promPassword
+
+cluster:
+  database:
+    user: db-user # l781zq2smyo7wbwas3bn
+    password: CHANGEME123!
+    createSecret: true
+  init:
+    createConfigmap: true
+    env:
+      config:
+        createConfigMap: true
+        values: {}
+      secret:
+        createSecret: true
+        values: {}
+  version: 7.0.25
+  featureCompatibilityVersion: 7.0
+  additionalMongodConfig: {}

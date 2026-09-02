@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "svc-postgres.fullname" . }}
+  name: {{ include "webcomponent.fullname" . }}
   labels:
-    {{- include "svc-postgres.labels" . | nindent 4 }}
+    {{- include "webcomponent.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "svc-postgres.selectorLabels" . | nindent 6 }}
+      {{- include "webcomponent.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -18,7 +18,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "svc-postgres.labels" . | nindent 8 }}
+        {{- include "webcomponent.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -27,7 +27,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "svc-postgres.serviceAccountName" . }}
+      serviceAccountName: {{ include "webcomponent.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -44,11 +44,6 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          envFrom:
-            - configMapRef:
-                name: {{ include "svc-postgres.configmapName" . }}
-            - secretRef:
-                name: {{ include "svc-postgres.secretName" . }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
@@ -61,18 +56,12 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          volumeMounts:
-          - name: {{ include "svc-postgres.fullname" . }}-pgadmin-server-config
-            mountPath: /pgadmin4/servers.json
-            subPath: servers.json
           {{- with .Values.volumeMounts }}
+          volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-      volumes:
-        - name: {{ include "svc-postgres.fullname" . }}-pgadmin-server-config
-          secret:
-            secretName: {{ include "svc-postgres.pgadminServerConfigSecret" . }}
       {{- with .Values.volumes }}
+      volumes:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.nodeSelector }}

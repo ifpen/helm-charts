@@ -1,12 +1,14 @@
-# Default values for svc-postgres.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+global:
+  domain: ""
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
+role: ""
+
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: docker.io/dpage/pgadmin4
+  repository: nginx
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
@@ -50,8 +52,6 @@ securityContext: {}
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
-  # Override the name of the service associated with the deployment
-  nameOverride: ""
   # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
   type: ClusterIP
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
@@ -72,36 +72,27 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 100m
-    memory: 256Mi
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
-    path: /misc/ping
+    path: /
     port: http
-    scheme: HTTP
-  initialDelaySeconds: 360
-  periodSeconds: 10
-  timeoutSeconds: 5
-  successThreshold: 1
-  failureThreshold: 3
 readinessProbe:
   httpGet:
-    path: /misc/ping
+    path: /
     port: http
-    scheme: HTTP
-  initialDelaySeconds: 360
-  periodSeconds: 10
-  timeoutSeconds: 5
-  successThreshold: 1
-  failureThreshold: 3
-
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -139,38 +130,3 @@ env:
     createSecret: true
     existingSecret: ""
     values: {}
-
-cluster:
-  monitoring:
-    enabled: true
-  createSecret: true
-  image:
-    repository: "ghcr.io/cloudnative-pg/postgresql"
-    tagSuffix: "-system-trixie"
-    # Default tag is derived from versions.postgresql and cluster.image.tagSuffix
-    # Use this override if you want a specific tag you cannot obtain combining
-    # postgresql version with suffix (maybe your repo used prefixes etc)
-    tagOverride: ""
-  instances: 1
-  storage:
-    size: 80Gi
-  initdb:
-    auto: true
-
-global:
-  domain: ""
-  postgres:
-    version: "16"
-    database:
-      name: database
-      owner: database-owner
-      # Ideally, you want to create a secret elsewhere and set cluster.createSecret to false
-      password: CHANGEME123!
-      # Name of the secret, used to share data to other charts, mandatory.
-      # If secret is set elsewhere, put its name here and set cluster.createSecret to false
-      secret: null
-    admin:
-      user: pgadmin-user
-      email: pgadmin-user@mail.example.com
-      password: CHANGEMET00!
-      secret: null

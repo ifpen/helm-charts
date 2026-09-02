@@ -60,3 +60,55 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+
+
+{{- define "svc-mongodb.configmapName" -}}
+{{- printf "%s-config" (include "svc-mongodb.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "svc-mongodb.secretName" -}}
+{{- printf "%s-config-sec" (include "svc-mongodb.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+
+
+
+{{/*
+MongoDB Cluster specific tpls
+*/}}
+{{- define "svc-mongodb.clusterName" -}}
+{{- printf "%s-mongo" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "svc-mongodb.clusterSecretName" -}}
+{{- printf "%s" (include "svc-mongodb.clusterName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "svc-mongodb.scramSecretName" -}}
+{{- printf "%s-scram" (include "svc-mongodb.clusterName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "svc-mongodb.serviceAccountAppdb" -}}
+{{- printf "%s-appdb" (include "svc-mongodb.clusterName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+
+{{/*
+MongoDB Cluster init
+*/}}
+{{- define "svc-mongodb.initJob" -}}
+{{- printf "%s-init-db" (include "svc-mongodb.clusterName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "svc-mongodb.initScriptConfigmap" -}}
+{{- printf "%s-init-script" (include "svc-mongodb.clusterName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "svc-mongodb.initEnvConfigmapName" -}}
+{{- printf "%s-init-env" (include "svc-mongodb.clusterName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "svc-mongodb.initEnvSecretName" -}}
+{{- printf "%s-init-env-sec" (include "svc-mongodb.clusterName" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
