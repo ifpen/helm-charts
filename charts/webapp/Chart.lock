@@ -1,0 +1,15 @@
+dependencies:
+- name: webcomponent
+  repository: file://../webcomponent
+  version: 0.1.0
+- name: webcomponent
+  repository: file://../webcomponent
+  version: 0.1.0
+- name: svc-postgres
+  repository: file://../svc-postgres
+  version: 0.1.0
+- name: svc-mongodb
+  repository: file://../svc-mongodb
+  version: 0.1.0
+digest: sha256:8ac91ad6fe32c2fa0d773f67155c69efd66df6e64405c40ead7b5b668797a66e
+generated: "2026-09-02T05:35:56.731562093Z"

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: svc-postgres
+description: Fast-IT Helm Chart for a CNPG cluster alongside PG Admin for external access
+
+type: application
+version: 0.1.0
+appVersion: "9"

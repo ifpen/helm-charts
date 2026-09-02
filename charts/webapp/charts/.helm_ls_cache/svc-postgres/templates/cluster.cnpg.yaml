@@ -1,0 +1,16 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "svc-postgres.clusterName" . }}
+spec:
+  instances: {{ .Values.cluster.instances }}
+  storage:
+    size: {{ .Values.cluster.storage.size | quote }}
+  imageName: {{ include "svc-postgres.clusterImage" . }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.global.postgres.database.name | quote }}
+      owner: {{ .Values.global.postgres.database.owner | quote }}
+      secret:
+        name: {{ .Values.global.postgres.database.secret | quote }}
