@@ -189,6 +189,18 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/svc-mongodb-0.1.0-rc.1/svc-mongodb-0.1.0-rc.1.tgz
     version: 0.1.0-rc.1
+  svc-postgres:
+  - apiVersion: v2
+    appVersion: "9"
+    created: "2026-09-02T15:11:22.619698838Z"
+    description: Fast-IT Helm Chart for a CNPG cluster alongside PG Admin for external
+      access
+    digest: 96f1bb512029844ba1bc9de8d5d4c8b1ba08068b6ae928d0a7b48927e66c510e
+    name: svc-postgres
+    type: application
+    urls:
+    - https://github.com/ifpen/helm-charts/releases/download/svc-postgres-0.1.0-rc.1/svc-postgres-0.1.0-rc.1.tgz
+    version: 0.1.0-rc.1
   webcomponent:
   - apiVersion: v2
     appVersion: 1.16.0
@@ -200,4 +212,4 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/webcomponent-0.1.0-rc.1/webcomponent-0.1.0-rc.1.tgz
     version: 0.1.0-rc.1
-generated: "2026-09-02T15:11:21.241198997Z"
+generated: "2026-09-02T15:11:22.618865474Z"
