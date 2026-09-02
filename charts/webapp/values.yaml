@@ -7,8 +7,6 @@ global:
 
   postgres:
     enabled: false
-  mongodb:
-    enabled: false
 
 #
 # Dependency Webcomponents

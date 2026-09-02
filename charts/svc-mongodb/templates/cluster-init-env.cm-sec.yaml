@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "svc-mongodb.initEnvConfigmapName " . }}
+  name: {{ include "svc-mongodb.initEnvConfigmapName" . }}
   labels:
     {{- include "svc-mongodb.labels" . | nindent 4 }}
 data:
@@ -13,11 +13,10 @@ data:
   MONGODB_COLLECTION: __init__
   MONGO_INITDB_ROOT_USERNAME: {{ .Values.cluster.database.user | quote }}
   MONGODB_USERNAME: {{ .Values.cluster.database.user | quote }}
-
   {{- range $key, $value := .Values.cluster.init.env.config.values }}
   {{ $key }}: {{ $value | toString | quote }}
   {{- end }}
-{{- end -}}
+{{ end }}
 
 {{- if .Values.cluster.init.env.secret.createSecret -}}
 ---
@@ -32,4 +31,4 @@ stringData:
   {{- range $key, $value := .Values.cluster.init.env.secret.values }}
   {{ $key }}: {{ $value | toString | quote }}
   {{- end }}
-{{- end -}}
+{{ end }}

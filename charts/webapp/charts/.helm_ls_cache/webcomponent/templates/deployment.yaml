@@ -13,8 +13,9 @@ spec:
       {{- include "webcomponent.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+        checksum/environment: {{ include (print $.Template.BasePath "/environment.cm-sec.yaml") . | sha256sum }}
+      {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
@@ -44,6 +45,11 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "webcomponent.configmapName" . }}
+            - secretRef:
+                name: {{ include "webcomponent.secretName" . }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

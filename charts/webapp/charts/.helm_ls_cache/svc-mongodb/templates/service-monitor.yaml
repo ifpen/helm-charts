@@ -9,13 +9,13 @@ type: Opaque
 stringData:
   username: {{ .Values.monit.promUsername }}
   password: {{ .Values.monit.promPassword }}
-{{ end }}
+{{- end -}}
 
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "svc-mongodb.clusterName" . }}-sm
+  name: mongodb-sm
 spec:
   endpoints:
     - basicAuth:
@@ -33,4 +33,4 @@ spec:
   selector:
     matchLabels:
       app: "{{ include "svc-mongodb.clusterName" . }}-svc"
-{{ end }}
+{{- end -}}
