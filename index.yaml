@@ -234,6 +234,36 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/svc-postgres-0.1.0-rc.1/svc-postgres-0.1.0-rc.1.tgz
     version: 0.1.0-rc.1
+  webapp:
+  - apiVersion: v2
+    created: "2026-09-02T16:10:01.699981547Z"
+    dependencies:
+    - alias: back
+      name: webcomponent
+      repository: https://ifpen.github.io/helm-charts
+      version: '>= 0.1.0-rc.0'
+    - alias: front
+      condition: front.enabled
+      name: webcomponent
+      repository: https://ifpen.github.io/helm-charts
+      version: '>= 0.1.0-rc.0'
+    - alias: postgres
+      condition: postgres.enabled
+      name: svc-postgres
+      repository: https://ifpen.github.io/helm-charts
+      version: '>= 0.1.0-rc.0'
+    - alias: mongodb
+      condition: mongodb.enabled
+      name: svc-mongodb
+      repository: https://ifpen.github.io/helm-charts
+      version: '>= 0.1.0-rc.0'
+    description: Fast-IT Meta Helm-Chart for WebApps
+    digest: dc88ec74959a6beccc6cc3a4a71927ac7c6e0d347100163cc329f8c9128c6e90
+    name: webapp
+    type: application
+    urls:
+    - https://github.com/ifpen/helm-charts/releases/download/webapp-0.1.0-rc.1/webapp-0.1.0-rc.1.tgz
+    version: 0.1.0-rc.1
   webcomponent:
   - apiVersion: v2
     appVersion: 1.16.0
@@ -245,4 +275,4 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/webcomponent-0.1.0-rc.1/webcomponent-0.1.0-rc.1.tgz
     version: 0.1.0-rc.1
-generated: "2026-09-02T15:14:20.675924072Z"
+generated: "2026-09-02T16:10:01.698329614Z"
