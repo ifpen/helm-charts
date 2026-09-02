@@ -80,9 +80,35 @@ postgres:
 
 mongodb:
   enabled: false
+  mongoExpress:
+    username: mongo-express-user
+    password: CHANGEM3PLE4SE!!
+    env:
+      config:
+        createConfigMap: true
+        values: {}
+      secret:
+        createSecret: true
+        values: {}
   monit:
-    enabled: false
+    enabled: true
     createSecret: true
+    promUsername: promUsername
+    promPassword: promPassword
   cluster:
     database:
+      user: db-user
+      password: CHANGEME123!
       createSecret: true
+    init:
+      createConfigmap: true
+      env:
+        config:
+          createConfigMap: true
+          values: {}
+        secret:
+          createSecret: true
+          values: {}
+    version: 7.0.25
+    featureCompatibilityVersion: "7.0"
+    additionalMongodConfig: {}

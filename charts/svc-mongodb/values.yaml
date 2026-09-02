@@ -93,7 +93,7 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /status
-    port: mongo-express
+    port: http
     scheme: HTTP
   initialDelaySeconds: 60
   timeoutSeconds: 5
@@ -130,6 +130,18 @@ affinity: {}
 
 global:
   domain: "example.com"
+  clusterDomain: "cluster.local"
+
+mongoExpress:
+  username: mongo-express-user
+  password: CHANGEM3PLE4SE!!
+  env:
+    config:
+      createConfigMap: true
+      values: {}
+    secret:
+      createSecret: true
+      values: {}
 
 monit:
   enabled: true
@@ -139,7 +151,7 @@ monit:
 
 cluster:
   database:
-    user: db-user # l781zq2smyo7wbwas3bn
+    user: db-user
     password: CHANGEME123!
     createSecret: true
   init:

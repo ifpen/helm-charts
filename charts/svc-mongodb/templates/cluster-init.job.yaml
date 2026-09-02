@@ -1,3 +1,4 @@
+{{- if .Release.IsInstall }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -74,3 +75,4 @@ spec:
           imagePullPolicy: IfNotPresent
       restartPolicy: OnFailure
       serviceAccountName: "{{ include "svc-mongodb.serviceAccountAppdb" . }}"
+{{- end }}

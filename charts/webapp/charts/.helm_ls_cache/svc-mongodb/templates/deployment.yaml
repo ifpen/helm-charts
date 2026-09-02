@@ -44,11 +44,6 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          envFrom:
-            - configMapRef:
-                name: {{ include "svc-mongodb.mongoExpressEnvConfigmapName" . }}
-            - secretRef:
-                name: {{ include "svc-mongodb.mongoExpressEnvSecretName" . }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
