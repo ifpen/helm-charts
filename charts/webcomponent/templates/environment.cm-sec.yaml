@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "webcomponent.configmapName " . }}
+  name: {{ include "webcomponent.configmapName" . }}
   labels:
     {{- include "webcomponent.labels" . | nindent 4 }}
 data:
@@ -17,7 +17,7 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ include "webcomponent.secretName " . }}
+  name: {{ include "webcomponent.secretName" . }}
   labels:
     {{- include "webcomponent.labels" . | nindent 4 }}
 type: Opaque
