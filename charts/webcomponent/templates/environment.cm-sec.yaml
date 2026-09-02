@@ -1,4 +1,4 @@
-{{- if and (empty .Values.env.config.existingConfigMap) .Values.env.config.createConfigMap -}}
+{{ if and (empty .Values.env.config.existingConfigMap) .Values.env.config.createConfigMap }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -10,9 +10,9 @@ data:
   {{- range $key, $value := .Values.env.config.values }}
   {{ $key }}: {{ $value | toString | quote }}
   {{- end }}
-{{- end -}}
+{{ end }}
 
-{{- if and (empty .Values.env.secret.existingSecret)  .Values.env.secret.createSecret -}}
+{{ if and (empty .Values.env.secret.existingSecret)  .Values.env.secret.createSecret }}
 ---
 apiVersion: v1
 kind: Secret
@@ -25,4 +25,4 @@ stringData:
   {{- range $key, $value := .Values.env.secret.values }}
   {{ $key }}: {{ $value | toString | quote }}
   {{- end }}
-{{- end -}}
+{{ end }}
