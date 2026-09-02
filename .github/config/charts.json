@@ -6,6 +6,11 @@
     "path_filter": "charts/filesender/**"
   },
   {
+    "name": "webapp",
+    "path": "charts/webapp",
+    "path_filter": "charts/webapp/**"
+  },
+  {
     "name": "webcomponent",
     "path": "charts/webcomponent",
     "path_filter": "charts/webcomponent/**"
