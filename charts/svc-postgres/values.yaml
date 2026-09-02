@@ -166,7 +166,7 @@ database:
   password: CHANGEME123!
   # Name of the secret, used to share data to other charts, mandatory.
   # If secret is set elsewhere, put its name here and set cluster.createSecret to false
-  secret: null
+  secret: setmetonullplease
 admin:
   user: pgadmin-user
   email: pgadmin-user@mail.example.com
