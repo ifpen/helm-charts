@@ -7,7 +7,7 @@ metadata:
   labels:
     {{- include "svc-postgres.labels" . | nindent 4 }}
 data:
-  PGADMIN_DEFAULT_EMAIL: {{ required "global.postgres.admin.email is required when env.config.createConfigMap=true" .Values.global.postgres.admin.email | quote }}
+  PGADMIN_DEFAULT_EMAIL: {{ required "admin.email is required when env.config.createConfigMap=true" .Values.admin.email | quote }}
   {{- range $key, $value := .Values.env.config.values }}
   {{ $key }}: {{ $value | toString | quote }}
   {{- end }}
@@ -23,7 +23,7 @@ metadata:
     {{- include "svc-postgres.labels" . | nindent 4 }}
 type: Opaque
 stringData:
-  PGADMIN_DEFAULT_PASSWORD: {{ required "global.postgres.admin.password is required when env.secret.createSecret=true" .Values.global.postgres.admin.password | quote }}
+  PGADMIN_DEFAULT_PASSWORD: {{ required "admin.password is required when env.secret.createSecret=true" .Values.admin.password | quote }}
   {{- range $key, $value := .Values.env.secret.values }}
   {{ $key }}: {{ $value | toString | quote }}
   {{- end }}

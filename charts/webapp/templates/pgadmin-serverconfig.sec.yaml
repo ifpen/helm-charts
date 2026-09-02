@@ -13,9 +13,9 @@ stringData:
           "Name": "PostgreSQL Database",
           "Group": "Servers",
           "Host": "{{ include "svc-postgres.clusterName" .Subcharts.postgres }}-rw.{{ .Release.Namespace }}.svc.cluster.local",
-          "Port": {{ required "global.postgres.database.port is required when global.postgres.enabled=true" .Values.global.postgres.database.port }},
-          "MaintenanceDB": {{ required "global.postgres.database.name is required when global.postgres.enabled=true" .Values.global.postgres.database.name | quote }},
-          "Username": {{ required "global.postgres.database.owner is required when global.postgres.enabled=true" .Values.global.postgres.database.owner | quote }},
+          "Port": {{ required "postgres.database.port is required when global.postgres.enabled=true" .Values.postgres.database.port }},
+          "MaintenanceDB": {{ required "postgres.database.name is required when global.postgres.enabled=true" .Values.postgres.database.name | quote }},
+          "Username": {{ required "postgres.database.owner is required when global.postgres.enabled=true" .Values.postgres.database.owner | quote }},
           "SSLMode": "prefer",
           "SavePassword": true
         }

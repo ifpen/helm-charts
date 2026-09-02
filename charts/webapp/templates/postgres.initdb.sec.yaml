@@ -3,8 +3,8 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ required "global.postgres.database.secret is required when cluster.createSecret=true" .Values.global.postgres.database.secret | quote }}
+  name: {{ required "postgres.database.secret is required when cluster.createSecret=true" .Values.postgres.database.secret | quote }}
 stringData:
-  username: {{ required "global.postgres.database.owner is required when cluster.createSecret=true" .Values.global.postgres.database.owner | quote }}
-  password: {{ required "global.postgres.database.password is required when cluster.createSecret=true" .Values.global.postgres.database.password | quote }}
+  username: {{ required "postgres.database.owner is required when cluster.createSecret=true" .Values.postgres.database.owner | quote }}
+  password: {{ required "postgres.database.password is required when cluster.createSecret=true" .Values.postgres.database.password | quote }}
 {{- end -}}

@@ -7,20 +7,6 @@ global:
 
   postgres:
     enabled: false
-    version: "16"
-    database:
-      name: database
-      owner: database-owner
-      # Ideally, you want to create a secret elsewhere and set cluster.createSecret to false
-      password: CHANGEME123!
-      # Name of the secret, used to share data to other charts, mandatory.
-      # If secret is set elsewhere, put its name here and set cluster.createSecret to false
-      secret: postgres-initdb
-      port: 5432
-    admin:
-      email: pgadmin-user@mail.example.com
-      password: CHANGEMET00!
-      port: 80
   mongodb:
     enabled: false
 
@@ -70,6 +56,20 @@ postgres:
   ingress:
     enabled: true
     auto: true
+  version: "16"
+  database:
+    name: database
+    owner: database-owner
+    # Ideally, you want to create a secret elsewhere and set cluster.createSecret to false
+    password: CHANGEME123!
+    # Name of the secret, used to share data to other charts, mandatory.
+    # If secret is set elsewhere, put its name here and set cluster.createSecret to false
+    secret: postgres-initdb
+    port: 5432
+  admin:
+    email: pgadmin-user@mail.example.com
+    password: CHANGEMET00!
+    port: 80
   env:
     config:
       createConfigMap: false

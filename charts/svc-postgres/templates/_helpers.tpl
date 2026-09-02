@@ -64,7 +64,7 @@ Create the name of the service account to use
 
 {{- define "svc-postgres.clusterImage" -}}
 {{- $repository := required "cluster.image.repository is required" .Values.cluster.image.repository -}}
-{{- $postgresVersion := required "global.postgres.version is required" .Values.global.postgres.version -}}
+{{- $postgresVersion := required "version is required" .Values.version -}}
 {{- $defaultTag := printf "%s%s" $postgresVersion .Values.cluster.image.tagSuffix -}}
 {{- $tag := default $defaultTag .Values.cluster.image.tagOverride -}}
 {{- printf "%s:%s" $repository $tag -}}
@@ -89,7 +89,7 @@ Create the name of the service account to use
 
 {{- define "svc-postgres.pgadminServerConfigSecret" -}}
 {{- $defaultName := printf "%s-serverconfig-sec" (include "svc-postgres.fullname" .) | trunc 63 | trimSuffix "-" -}}
-{{- default $defaultName .Values.global.postgres.admin.secret -}}
+{{- default $defaultName .Values.admin.secret -}}
 {{- end -}}
 
 

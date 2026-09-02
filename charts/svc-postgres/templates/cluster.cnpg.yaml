@@ -10,7 +10,7 @@ spec:
   imageName: {{ include "svc-postgres.clusterImage" . }}
   bootstrap:
     initdb:
-      database: {{ .Values.global.postgres.database.name | quote }}
-      owner: {{ .Values.global.postgres.database.owner | quote }}
+      database: {{ .Values.database.name | quote }}
+      owner: {{ .Values.database.owner | quote }}
       secret:
-        name: {{ .Values.global.postgres.database.secret | quote }}
+        name: {{ .Values.database.secret | quote }}
