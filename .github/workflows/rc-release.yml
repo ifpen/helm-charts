@@ -191,7 +191,7 @@ jobs:
 
       - name: Push Docker RC image
         if: matrix.image_changed == true && matrix.linked_image != ''
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./${{ steps.rc-image.outputs.context }}
           file: ./${{ steps.rc-image.outputs.dockerfile }}
