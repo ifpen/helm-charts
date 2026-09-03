@@ -18,7 +18,7 @@ jobs:
       has_images: ${{ steps.set-matrix.outputs.has_images }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
@@ -67,7 +67,7 @@ jobs:
       matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
