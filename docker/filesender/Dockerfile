@@ -4,7 +4,7 @@
 FROM php:8.5.7-fpm-alpine3.24 AS builder
 
 # Arguments de build
-ARG FILESENDER_VERSION=3.10
+ARG FILESENDER_VERSION=3.12
 ARG SIMPLESAMLPHP_VERSION=2.5.2
 ARG AWS_SDK_PHP_VERSION=3.371.4
 
@@ -55,7 +55,7 @@ RUN curl -L https://github.com/simplesamlphp/simplesamlphp/releases/download/v${
 FROM php:8.5.7-fpm-alpine3.24
 
 # Metadata
-ARG FILESENDER_VERSION=3.10
+ARG FILESENDER_VERSION=3.12
 LABEL org.opencontainers.image.source="https://github.com/ifpen/helm-charts" \
       org.opencontainers.image.description="FileSender v${FILESENDER_VERSION} avec Nginx intégré" \
       org.opencontainers.image.version="${FILESENDER_VERSION}"
