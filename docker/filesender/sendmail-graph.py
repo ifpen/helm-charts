@@ -95,15 +95,21 @@ def build_message(msg, from_address, extra_recipients, send_on_behalf_of=False):
             if part.is_multipart():
                 continue
             ct = part.get_content_type()
-            if part.get_content_disposition() == "attachment":
-                filename = part.get_filename() or "attachment"
+            disposition = part.get_content_disposition()
+            filename = part.get_filename()
+            if disposition == "attachment" or filename:
                 content = part.get_payload(decode=True) or b""
-                attachments.append({
+                attachment = {
                     "@odata.type": "#microsoft.graph.fileAttachment",
-                    "name": filename,
+                    "name": filename or "attachment",
                     "contentBytes": base64.b64encode(content).decode(),
                     "contentType": ct,
-                })
+                }
+                content_id = part.get("Content-ID", "").strip("<>")
+                if disposition == "inline" and content_id:
+                    attachment["isInline"] = True
+                    attachment["contentId"] = content_id
+                attachments.append(attachment)
             elif ct == "text/html" and body_html is None:
                 payload = part.get_payload(decode=True)
                 if payload is not None:

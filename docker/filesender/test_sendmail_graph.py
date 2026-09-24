@@ -80,6 +80,39 @@ class SendmailGraphTests(unittest.TestCase):
         self.assertEqual(message["body"]["contentType"], "Text")
         self.assertIn("Téléchargement terminé", message["body"]["content"])
 
+    def test_build_message_keeps_inline_file_parts_as_attachments(self):
+        raw_message = (
+            b"To: Jerome <jerome@example.org>\r\n"
+            b"Subject: Test inline image\r\n"
+            b"MIME-Version: 1.0\r\n"
+            b"Content-Type: multipart/related; boundary=\"BOUNDARY\"\r\n"
+            b"\r\n"
+            b"--BOUNDARY\r\n"
+            b"Content-Type: text/html; charset=\"utf-8\"\r\n"
+            b"Content-Transfer-Encoding: quoted-printable\r\n"
+            b"\r\n"
+            b"<html><img src=3D\"cid:logo\"></html>\r\n"
+            b"--BOUNDARY\r\n"
+            b"Content-Type: image/png\r\n"
+            b"Content-Transfer-Encoding: base64\r\n"
+            b"Content-Disposition: inline; filename=\"logo.png\"\r\n"
+            b"Content-ID: <logo>\r\n"
+            b"\r\n"
+            b"iVBORw0KGgo=\r\n"
+            b"--BOUNDARY--\r\n"
+        )
+
+        payload = SENDMAIL_GRAPH.build_message(
+            self.parse_message(raw_message),
+            "shared@example.org",
+            [],
+        )
+
+        attachment = payload["message"]["attachments"][0]
+        self.assertEqual(attachment["name"], "logo.png")
+        self.assertTrue(attachment["isInline"])
+        self.assertEqual(attachment["contentId"], "logo")
+
 
 if __name__ == "__main__":
     unittest.main()
