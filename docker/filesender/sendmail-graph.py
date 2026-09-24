@@ -66,13 +66,18 @@ def addr_list(value):
     return recipients
 
 
+def header_value(msg, name):
+    """Return a decoded header value as a string."""
+    return str(msg.get(name, "") or "")
+
+
 def build_message(msg, from_address, extra_recipients, send_on_behalf_of=False):
     """Convert an email.message.Message into a Graph API sendMail payload."""
-    subject = msg.get("Subject", "")
-    to = addr_list(msg.get("To", ""))
-    cc = addr_list(msg.get("Cc", ""))
-    bcc = addr_list(msg.get("Bcc", ""))
-    reply_to = addr_list(msg.get("Reply-To", ""))
+    subject = header_value(msg, "Subject").replace("\r", " ").replace("\n", " ").strip()
+    to = addr_list(header_value(msg, "To"))
+    cc = addr_list(header_value(msg, "Cc"))
+    bcc = addr_list(header_value(msg, "Bcc"))
+    reply_to = addr_list(header_value(msg, "Reply-To"))
 
     # Merge positional-argument recipients into To
     for addr in extra_recipients:
@@ -87,9 +92,10 @@ def build_message(msg, from_address, extra_recipients, send_on_behalf_of=False):
 
     if msg.is_multipart():
         for part in msg.walk():
+            if part.is_multipart():
+                continue
             ct = part.get_content_type()
-            disp = str(part.get("Content-Disposition", ""))
-            if "attachment" in disp:
+            if part.get_content_disposition() == "attachment":
                 filename = part.get_filename() or "attachment"
                 content = part.get_payload(decode=True) or b""
                 attachments.append({
@@ -136,7 +142,7 @@ def build_message(msg, from_address, extra_recipients, send_on_behalf_of=False):
     # "Sent on behalf of" mode: requires Exchange Online Send-on-Behalf
     # permission on the shared mailbox for each user.
     if send_on_behalf_of:
-        original_from = addr_list(msg.get("From", ""))
+        original_from = addr_list(header_value(msg, "From"))
         if (
             original_from
             and original_from[0]["emailAddress"]["address"].lower()
@@ -189,10 +195,10 @@ def main():
 
     # Read the email from stdin
     raw = sys.stdin.buffer.read()
-    msg = email.message_from_bytes(raw, policy=email.policy.compat32)
+    msg = email.message_from_bytes(raw, policy=email.policy.default)
 
-    log(f"Sending email: subject={msg.get('Subject', '')!r} "
-        f"to={msg.get('To', '')!r}")
+    log(f"Sending email: subject={header_value(msg, 'Subject').replace(chr(13), ' ').replace(chr(10), ' ').strip()!r} "
+        f"to={header_value(msg, 'To')!r}")
 
     try:
         token = get_token(tenant_id, client_id, client_secret)
