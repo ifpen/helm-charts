@@ -91,6 +91,28 @@ entries:
     version: 3.10.0-rc.1
   - apiVersion: v2
     appVersion: "3.6"
+    created: "2026-09-24T09:59:21.984445824Z"
+    description: FileSender v3.6 - Application web open-source de partage de fichiers
+      volumineux avec SimpleSAMLphp et Nginx intégrés
+    digest: 289e66df6829dc69011e8d646606687d9cd19036c679150de6da38274fca5207
+    home: https://github.com/ifpen/helm-charts
+    keywords:
+    - filesender
+    - file-sharing
+    - saml
+    - simplesamlphp
+    maintainers:
+    - name: ifpen
+    name: filesender
+    sources:
+    - https://github.com/filesender/filesender
+    - https://github.com/simplesamlphp/simplesamlphp
+    type: application
+    urls:
+    - https://github.com/ifpen/helm-charts/releases/download/filesender-3.6.2-rc.1/filesender-3.6.2-rc.1.tgz
+    version: 3.6.2-rc.1
+  - apiVersion: v2
+    appVersion: "3.6"
     created: "2026-06-24T21:29:31.577419405Z"
     description: FileSender v3.6 - Application web open-source de partage de fichiers
       volumineux avec SimpleSAMLphp et Nginx intégrés
@@ -296,4 +318,4 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/webcomponent-0.1.0-rc.1/webcomponent-0.1.0-rc.1.tgz
     version: 0.1.0-rc.1
-generated: "2026-09-02T16:10:07.670562881Z"
+generated: "2026-09-24T09:59:21.983440908Z"
