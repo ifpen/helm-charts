@@ -258,10 +258,10 @@ entries:
     version: 0.1.0-rc.2
   - apiVersion: v2
     appVersion: "9"
-    created: "2026-09-02T15:11:22.619698838Z"
+    created: "2026-09-28T15:37:51.050940503Z"
     description: Fast-IT Helm Chart for a CNPG cluster alongside PG Admin for external
       access
-    digest: 96f1bb512029844ba1bc9de8d5d4c8b1ba08068b6ae928d0a7b48927e66c510e
+    digest: d2ac0ad89240f792cd42aacf897cf108418d4d40f43b476de9c61fa55aa403a8
     name: svc-postgres
     type: application
     urls:
@@ -318,4 +318,4 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/webcomponent-0.1.0-rc.1/webcomponent-0.1.0-rc.1.tgz
     version: 0.1.0-rc.1
-generated: "2026-09-24T09:59:21.983440908Z"
+generated: "2026-09-28T15:37:51.050323199Z"
