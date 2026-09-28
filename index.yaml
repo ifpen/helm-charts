@@ -340,9 +340,9 @@ entries:
   webcomponent:
   - apiVersion: v2
     appVersion: 1.16.0
-    created: "2026-09-02T16:10:07.671235671Z"
+    created: "2026-09-28T15:39:01.390875853Z"
     description: Fast-IT Helm Chart for WebComponents, used in WebApps and WebServices
-    digest: e55cbd9b1c4adb9bbdaf3fba3569a609827bc41e0019f5e4cb1878e7a346b1fe
+    digest: dc2ea5c71d96cc904d93edff211cfc279b1b00436f037e72ac1445ba9f9bc909
     name: webcomponent
     type: application
     urls:
@@ -358,4 +358,4 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/webcomponent-0.1.0-rc.1/webcomponent-0.1.0-rc.1.tgz
     version: 0.1.0-rc.1
-generated: "2026-09-28T15:38:59.217870148Z"
+generated: "2026-09-28T15:39:01.390290931Z"
