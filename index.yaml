@@ -224,6 +224,17 @@ entries:
   svc-mongodb:
   - apiVersion: v2
     appVersion: "1"
+    created: "2026-09-28T18:43:54.486194792Z"
+    description: Fast-IT Helm Chart for a MongoDB cluster alongside Mongo Express
+      for external access
+    digest: 5794e5f4ea37de9509c50cdec530902300ef24f6fcff159faa7b0c5cb57eec5a
+    name: svc-mongodb
+    type: application
+    urls:
+    - https://github.com/ifpen/helm-charts/releases/download/svc-mongodb-0.1.0-rc.6/svc-mongodb-0.1.0-rc.6.tgz
+    version: 0.1.0-rc.6
+  - apiVersion: v2
+    appVersion: "1"
     created: "2026-09-28T15:38:59.219273702Z"
     description: Fast-IT Helm Chart for a MongoDB cluster alongside Mongo Express
       for external access
@@ -369,4 +380,4 @@ entries:
     urls:
     - https://github.com/ifpen/helm-charts/releases/download/webcomponent-0.1.0-rc.1/webcomponent-0.1.0-rc.1.tgz
     version: 0.1.0-rc.1
-generated: "2026-09-28T18:43:53.174153877Z"
+generated: "2026-09-28T18:43:54.485354121Z"
