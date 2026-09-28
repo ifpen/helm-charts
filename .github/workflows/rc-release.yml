@@ -183,7 +183,7 @@ jobs:
 
       - name: Login to GitHub Container Registry
         if: matrix.image_changed == true && matrix.linked_image != ''
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
