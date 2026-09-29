@@ -1,0 +1,35 @@
+name: Release please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      paths_released: ${{ steps.release.outputs.paths_released }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    strategy:
+      matrix:
+        chart_path: ${{ fromJSON(needs.release-please.outputs.paths_released) }}
+    uses: ./.github/workflows/release.yml
+    with:
+      chart_path: ${{ matrix.chart_path }}
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}

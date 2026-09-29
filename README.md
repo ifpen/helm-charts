@@ -7,7 +7,11 @@ Collection de charts Helm pour Kubernetes, maintenus par [ifpen](https://github.
 <!-- CHART-TABLE-START -->
 | Chart | Version | Description |
 |-------|---------|-------------|
-| [filesender](charts/filesender/) | 3.6.1 | FileSender v3.6 - Application web open-source de partage de fichiers volumineux avec SimpleSAMLphp et Nginx intégrés |
+| [filesender](charts/filesender/) | 3.10.0 | FileSender v3.10 - Application web open-source de partage de fichiers volumineux avec SimpleSAMLphp et Nginx intégrés |
+| [webcomponent](charts/webcomponent/) | 0.1.0 | Fast-IT WebComponents |
+| [webapp](charts/webapp/) | 0.1.0 | Fast-IT WebApps |
+| [svc-postgres](charts/svc-postgres/) | 0.1.0 | Fast-IT PostgreSQL service |
+| [svc-mongodb](charts/svc-mongodb/) | 0.1.0 | Fast-IT MongoDB service |
 <!-- CHART-TABLE-END -->
 
 Consultez le README de chaque chart pour la documentation complète et les options de configuration.
@@ -22,7 +26,7 @@ Consultez le README de chaque chart pour la documentation complète et les optio
 ### Ajouter le repository Helm
 
 ```bash
-helm repo add ifpen https://ifpen.github.io/helm-charts/
+helm repo add ifpen https://ifpen.github.io/helm-charts
 helm repo update
 ```
 
@@ -30,6 +34,12 @@ helm repo update
 
 ```bash
 helm install <release-name> ifpen/<chart-name>
+```
+
+Use `--devel` when selecting an RC:
+
+```bash
+helm install <release-name> ifpen/<chart-name> --version <version>-rc.<pr>.<run> --devel
 ```
 
 Par exemple, pour installer FileSender :

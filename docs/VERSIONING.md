@@ -1,146 +1,65 @@
-# Convention de versioning — ifpen/helm-charts
+# Versioning and releases
 
-> Document de référence pour comprendre les règles de versioning des images Docker
-> et des charts Helm dans ce dépôt.
+This repository uses trunk-based development. `main` is the only long-lived
+branch; every change is a short pull request. Direct pushes and bot commits to
+`main` are disabled by branch protection.
 
-## Principe : deux axes indépendants
+## Release cycle
 
-| Axe | Ce qu'il versionne | Déclencheur | Source de vérité |
-|-----|-------------------|-------------|------------------|
-| **Tag image** `ghcr.io/ifpen/filesender:x.y.z` | L'image Docker FileSender (PHP, SimpleSAMLphp, Nginx, AWS SDK, correctifs Docker) | Changement dans `docker/filesender/**` sur `main` | `ARG FILESENDER_VERSION` dans le Dockerfile + compteur `.z` |
-| **Version chart** `charts/filesender/Chart.yaml: version` | Le packaging Helm (templates, values, dépendances) | Nouvelle image construite OU changement de packaging seul (`charts/filesender/**`) | `Chart.yaml: version` (géré par auto-commit `[skip ci]`) |
+1. A pull request runs linting, templating, kubeconform, chart installation, and
+   an image build without pushing.
+2. `rc-release.yml` publishes one `-rc.<pull-request>.<run-attempt>` package
+   for every changed chart. It updates the Helm index and adds one updatable
+   installation comment to the pull request. The three newest RCs per chart are
+   retained.
+3. Merging the pull request adds conventional commits to the relevant
+   release-please Release PR. A chart is stable only when its own Release PR
+   is merged.
+4. `release-please.yml` creates a component tag named
+   `<chart>-<version>` (without `v`, which matches chart-releaser naming) and
+   invokes `release.yml` in the same workflow. This is intentional: tags made
+   with `GITHUB_TOKEN` do not start another workflow.
+5. The publication job builds the chart (and its dependencies), attaches it to
+   the GitHub Release, updates `gh-pages`, publishes linked images, and removes
+   that chart's RC releases.
 
-Les deux axes partagent la même base `x.y` (version FileSender) mais leurs compteurs `.z`
-évoluent de façon **indépendante** selon les déclencheurs ci-dessus.
+The first FileSender stable release is based at `3.10.0`. The manifest is
+therefore intentionally initialized to `3.10.0`; use a `Release-As: 3.10.0`
+footer in the first release commit if that exact version must be created.
 
----
+## FileSender
 
-## Axe 1 — Tag de l'image FileSender
+`charts/filesender/Chart.yaml` follows the application major/minor:
+`version: <FileSender x.y>.<chart patch>`, `appVersion: "<x.y>"`, and the
+description starts with `FileSender v<x.y>`. `values.yaml:image.tag` is the
+complete chart version and carries the `x-release-please-version` annotation.
+The stable image is built as
+`ghcr.io/ifpen/filesender:<chart-version>` and also receives `latest`.
 
-### Format
+Renovate updates `FILESENDER_VERSION` with `feat(filesender)` and a
+`Release-As: <new version>.0` footer. Regex managers keep `appVersion`,
+description, and image tag aligned. PHP, SimpleSAMLphp, AWS SDK, PostgreSQL,
+and Docker changes use `fix(filesender)` where appropriate.
 
-```
-x.y.z
-```
+## Fast-IT charts
 
-- `x.y` = version **FileSender**, lue depuis `ARG FILESENDER_VERSION` dans
-  `docker/filesender/Dockerfile` (ex. `3.10`).
-- `.z` = **patch** auto-incrémenté à chaque reconstruction de l'image causée par
-  un composant **interne** au conteneur (PHP, SimpleSAMLphp, AWS SDK, correctifs
-  Dockerfile), **sans** changement de `x.y`.
-- Quand `x.y` change (nouvelle version FileSender), `.z` repart à **0**.
+`webcomponent`, `webapp`, `svc-postgres`, and `svc-mongodb` remain `0.x`.
+Their Release PR is the stability decision. Dependencies are resolved from
+the published Helm repository (`>= 0.1.0-0`), while a release gate rejects a
+`webapp` lock file containing `-rc` or `-alpha`.
 
-### Calcul du patch `.z`
+## Renovate and adding artifacts
 
-Le script `.github/scripts/version-filesender.sh` :
+Renovate targets `main`. GitHub Action updates are `chore(ci)` and may
+automerge; package updates are scoped to the affected chart. To add a chart or
+image, add an entry to `.github/config/charts.json` or `images.json`, include
+its path filter, and add the corresponding package to the release-please
+configuration and manifest.
 
-1. Interroge l'API GHCR (`ghcr.io/v2/<owner>/filesender/tags/list`) pour trouver
-   le dernier tag `x.y.*` déjà publié.
-2. Si un tag `x.y.N` existe → `z = N + 1`.
-3. Si aucun tag `x.y.*` n'existe (première build sur cette base) → `z = 0`.
-4. En cas d'indisponibilité de l'API GHCR, fallback sur le patch du `Chart.yaml`
-   local (même logique d'incrément).
+## Maintainer migration checklist
 
-### ⚠️ PostgreSQL exclu
-
-L'image FileSender ne contient **pas** PostgreSQL (c'est une image officielle
-`postgres` référencée dans `values.yaml`). Un bump du tag PostgreSQL dans
-`values.yaml` **ne déclenche jamais** de reconstruction de l'image FileSender ;
-il bumpe uniquement le **chart**.
-
-### Tags sur `develop`
-
-Sur la branche `develop`, l'image reçoit un tag prévisuel de la forme :
-
-```
-develop-<sha7>-<timestamp>
-```
-
-Aucun tag stable `x.y.z` n'est publié sur `develop`.
-
----
-
-## Axe 2 — Version du chart Helm
-
-### Format
-
-```
-x.y.z
-```
-
-Même base `x.y` que FileSender, mais `.z` est le **patch propre du chart**,
-indépendant du patch de l'image.
-
-### Règles de bump
-
-Le chart est bumpé automatiquement (commit `[skip ci]`) dans ces cas :
-
-| Cas | Workflow | Action |
-|-----|---------|--------|
-| Nouvelle image FileSender construite (`docker/filesender/**` modifié sur `main`) | `docker-build.yml` | Bump `version` chart + mise à jour `values.yaml: image.tag` + `appVersion` |
-| Changement de packaging sans image (`charts/filesender/**` modifié, sans `docker/**`) | `chart-bump.yml` | Bump **patch** de `version` uniquement |
-
-### Lien à sens unique (image → chart)
-
-```
-docker/filesender/Dockerfile
-         │
-         │  ARG FILESENDER_VERSION=x.y
-         ▼
-.github/scripts/version-filesender.sh
-         │
-         │  calcule image_tag=x.y.z  chart_version=x.y.z
-         ▼
-charts/filesender/values.yaml     charts/filesender/Chart.yaml
-  image.tag: "x.y.z"               version: x.y.z
-                                    appVersion: "x.y"
-```
-
-Un changement dans le chart (ex. bump PostgreSQL) **ne remonte jamais**
-vers l'image Docker.
-
----
-
-## Scénarios
-
-| Scénario | Image reconstruite ? | Chart bumpé ? | Détail |
-|---------|---------------------|--------------|--------|
-| Bump tag PostgreSQL dans `values.yaml` | ❌ Non | ✅ Oui (patch) | `chart-bump.yml`, `image.tag` FileSender inchangé |
-| Bump PHP / SimpleSAMLphp dans Dockerfile | ✅ Oui (`.z+1`) | ✅ Oui (même `x.y.z`) | `docker-build.yml` reconstruit l'image et met à jour le chart |
-| Bump FileSender (`x.y` change, ex. `3.10` → `3.11`) | ✅ Oui (`z=0`) | ✅ Oui (base `x.y` change, `z=0`) | `docker-build.yml`, `appVersion` mis à jour |
-| Modif `values.yaml` ou templates seule | ❌ Non | ✅ Oui (patch) | `chart-bump.yml` |
-| Modif `.github/**` seule | ❌ Non | ❌ Non | `ci-self.yml` lint uniquement |
-
----
-
-## Anti-boucle d'auto-commit
-
-Tous les commits automatiques (auto-bump chart, mise à jour `image.tag`) portent
-le suffixe `[skip ci]` dans leur message. GitHub Actions ignore automatiquement
-les pushes dont le message contient ce suffixe, évitant toute boucle infinie.
-
----
-
-## Resynchronisation initiale (PR de refonte)
-
-Lors de la refonte des workflows (juin 2026), le chart a été resynchronisé :
-
-- **Avant** : `version: 3.6.5`, `appVersion: "3.6"` — décalé de FileSender 3.10.
-- **Après** : `version: 3.10.0`, `appVersion: "3.10"` — aligné sur FileSender 3.10.
-
-La version `3.10.0 > 3.6.5` en semver, donc compatible avec `helm/chart-releaser-action`.
-
----
-
-## Architecture multi-chart / multi-image
-
-Les registres JSON pilotent les workflows :
-
-- `.github/config/images.json` : liste des images à construire (contexte, Dockerfile,
-  filtre de chemin, script de versioning).
-- `.github/config/charts.json` : liste des charts (chemin, image liée, filtre de chemin).
-
-Pour ajouter un nouveau chart ou une nouvelle image : ajouter une entrée dans le
-registre correspondant. Les workflows `docker-build.yml`, `chart-bump.yml`,
-`pr-validation.yml` et `rc-release.yml` s'adaptent automatiquement via des matrices
-dynamiques générées depuis ces JSON.
+After this migration, close PR #31, configure protected `main` with required
+`pr-validation` checks and mandatory pull requests, ensure the workflow token
+has `contents: write`, `packages: write`, and `pull-requests: write`, remove
+orphaned RCs, and delete `develop`. No workflow pushes to `main`; the only
+automated write is to the Helm `gh-pages` branch and GitHub Releases.

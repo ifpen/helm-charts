@@ -1,0 +1,28 @@
+{
+  "release-type": "helm",
+  "separate-pull-requests": true,
+  "include-component-in-tag": true,
+  "include-v-in-tag": false,
+  "tag-separator": "-",
+  "release-name-template": "${component} ${version}",
+  "changelog-path": "CHANGELOG.md",
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "packages": {
+    "charts/filesender": {
+      "component": "filesender"
+    },
+    "charts/webcomponent": {
+      "component": "webcomponent"
+    },
+    "charts/webapp": {
+      "component": "webapp"
+    },
+    "charts/svc-postgres": {
+      "component": "svc-postgres"
+    },
+    "charts/svc-mongodb": {
+      "component": "svc-mongodb"
+    }
+  }
+}

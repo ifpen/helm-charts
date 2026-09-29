@@ -1,0 +1,7 @@
+{
+  "charts/filesender": "3.10.0",
+  "charts/webcomponent": "0.1.0",
+  "charts/webapp": "0.1.0",
+  "charts/svc-postgres": "0.1.0",
+  "charts/svc-mongodb": "0.1.0"
+}
