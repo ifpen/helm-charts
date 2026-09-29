@@ -1,11 +1,12 @@
 # Multi-stage Dockerfile pour FileSender v3.5 avec Nginx intégré
-# Base: php:8.2-fpm-alpine
+# Base: php:8.x-fpm-alpine
 
-FROM php:8.5-fpm-alpine AS builder
+FROM php:8.5.7-fpm-alpine3.24 AS builder
 
 # Arguments de build
-ARG FILESENDER_VERSION=3.6
-ARG SIMPLESAMLPHP_VERSION=2.4.4
+ARG FILESENDER_VERSION=3.10
+ARG SIMPLESAMLPHP_VERSION=2.5.2
+ARG AWS_SDK_PHP_VERSION=3.371.4
 
 # Installation des dépendances de build
 RUN apk add --no-cache --virtual .build-deps \
@@ -43,17 +44,18 @@ RUN git clone --depth 1 --branch ${FILESENDER_VERSION} https://github.com/filese
 # Installation des dépendances S3 optionnelles via Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
     && cd /build/filesender/optional-dependencies/s3 \
-    && composer update --no-dev --no-interaction --optimize-autoloader
+    && composer require aws/aws-sdk-php:${AWS_SDK_PHP_VERSION} --no-update --no-interaction \
+    && composer update aws/aws-sdk-php --with-dependencies --no-dev --no-interaction --optimize-autoloader
 
 # Téléchargement de SimpleSAMLphp
 RUN curl -L https://github.com/simplesamlphp/simplesamlphp/releases/download/v${SIMPLESAMLPHP_VERSION}/simplesamlphp-${SIMPLESAMLPHP_VERSION}-full.tar.gz | tar xz \
     && mv simplesamlphp-${SIMPLESAMLPHP_VERSION} simplesaml
 
 # Image finale
-FROM php:8.5-fpm-alpine
+FROM php:8.5.7-fpm-alpine3.24
 
 # Metadata
-ARG FILESENDER_VERSION=3.6
+ARG FILESENDER_VERSION=3.10
 LABEL org.opencontainers.image.source="https://github.com/ifpen/helm-charts" \
       org.opencontainers.image.description="FileSender v${FILESENDER_VERSION} avec Nginx intégré" \
       org.opencontainers.image.version="${FILESENDER_VERSION}"
