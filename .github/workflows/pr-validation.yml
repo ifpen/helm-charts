@@ -12,6 +12,8 @@ on:
 jobs:
   paths:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       charts: ${{ steps.matrix.outputs.charts }}
       images: ${{ steps.matrix.outputs.images }}
@@ -39,6 +41,8 @@ jobs:
   lint:
     needs: paths
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: helm/chart-testing-action@v2.7.0
@@ -61,6 +65,8 @@ jobs:
     needs: paths
     if: contains(needs.paths.outputs.charts, 'filesender') || contains(needs.paths.outputs.charts, 'webcomponent') || contains(needs.paths.outputs.charts, 'webapp')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: helm/kind-action@v1.12.0
@@ -80,6 +86,8 @@ jobs:
     needs: paths
     if: needs.paths.outputs.images != '[]'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         image: ${{ fromJSON(needs.paths.outputs.images) }}
@@ -95,6 +103,8 @@ jobs:
   release-gate:
     if: "${{ startsWith(github.event.pull_request.title, 'chore(main): release webapp') }}"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v5
