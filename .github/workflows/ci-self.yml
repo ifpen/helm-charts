@@ -33,9 +33,9 @@ jobs:
       - name: Check shell scripts (shellcheck)
         run: |
           if command -v shellcheck &>/dev/null; then
-            find .github/scripts -name '*.sh' -exec shellcheck {} +
+            [ ! -d .github/scripts ] || find .github/scripts -name '*.sh' -exec shellcheck {} +
           else
             echo "shellcheck non disponible, installation..."
             sudo apt-get install -y --no-install-recommends shellcheck
-            find .github/scripts -name '*.sh' -exec shellcheck {} +
+            [ ! -d .github/scripts ] || find .github/scripts -name '*.sh' -exec shellcheck {} +
           fi

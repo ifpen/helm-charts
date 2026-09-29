@@ -75,6 +75,22 @@ jobs:
           helm repo index /tmp/index \
             --url "https://github.com/${{ github.repository }}/releases/download/$CHART_NAME-$VERSION" \
             --merge /tmp/gh-pages/index.yaml
+          python3 -m pip install --quiet pyyaml
+          python3 - "$CHART_NAME" /tmp/index/index.yaml <<'PY'
+          import sys
+          import yaml
+
+          chart = sys.argv[1]
+          path = sys.argv[2]
+          with open(path) as stream:
+              index = yaml.safe_load(stream) or {}
+          entries = index.get("entries", {}).get(chart, [])
+          index["entries"][chart] = [
+              entry for entry in entries if "-rc." not in str(entry.get("version", ""))
+          ]
+          with open(path, "w") as stream:
+              yaml.safe_dump(index, stream, sort_keys=False)
+          PY
           cp /tmp/index/index.yaml /tmp/gh-pages/index.yaml
           cd /tmp/gh-pages
           git config user.name github-actions[bot]

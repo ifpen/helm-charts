@@ -33,3 +33,41 @@ jobs:
       chart_path: ${{ matrix.chart_path }}
     secrets:
       token: ${{ secrets.GITHUB_TOKEN }}
+
+  readme:
+    needs: [release-please, publish]
+    if: needs.release-please.outputs.releases_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refresh chart table
+        run: |
+          {
+            echo '| Chart | Version | Description |'
+            echo '|-------|---------|-------------|'
+            for chart in charts/*/Chart.yaml; do
+              name="$(awk '$1 == "name:" {print $2; exit}' "$chart")"
+              version="$(awk '$1 == "version:" {print $2; exit}' "$chart")"
+              description="$(awk '$1 == "description:" {$1=""; sub(/^ /, ""); print; exit}' "$chart")"
+              echo "| [$name](${chart%/Chart.yaml}/) | $version | $description |"
+            done
+          } > /tmp/chart-table
+          awk '
+            /<!-- CHART-TABLE-START -->/ {
+              print
+              while ((getline line < "/tmp/chart-table") > 0) print line
+              close("/tmp/chart-table")
+              skip=1
+              next
+            }
+            /<!-- CHART-TABLE-END -->/ {skip=0}
+            !skip {print}
+          ' README.md > README.md.new
+          mv README.md.new README.md
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: automation/update-chart-table
+          title: "docs: update chart table"
+          commit-message: "docs: update chart table"
+          body: "Update the README chart table after a stable chart release."
