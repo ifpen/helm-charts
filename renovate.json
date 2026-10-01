@@ -35,16 +35,6 @@
       "matchPackageNames": ["postgres"],
       "semanticCommitType": "fix",
       "semanticCommitScope": "filesender"
-    },
-    {
-      "matchFileNames": [
-        "charts/svc-postgres/values.yaml",
-        "charts/svc-mongodb/values.yaml",
-        "charts/webcomponent/values.yaml"
-      ],
-      "matchPackageNames": ["mongo", "mongo-express", "pgadmin4", "cloudnative-pg"],
-      "semanticCommitType": "fix",
-      "semanticCommitScope": "{{packageName}}"
     }
   ],
   "customManagers": [
@@ -91,13 +81,6 @@
       "matchStrings": ["tag: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\" # x-release-please-version"],
       "depNameTemplate": "filesender/filesender",
       "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["charts/webapp/values.yaml"],
-      "matchStrings": ["version: (?<currentValue>\\d+\\.\\d+\\.\\d+)"],
-      "depNameTemplate": "mongo",
-      "datasourceTemplate": "docker"
     }
   ]
 }

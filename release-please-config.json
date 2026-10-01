@@ -11,18 +11,6 @@
   "packages": {
     "charts/filesender": {
       "component": "filesender"
-    },
-    "charts/webcomponent": {
-      "component": "webcomponent"
-    },
-    "charts/webapp": {
-      "component": "webapp"
-    },
-    "charts/svc-postgres": {
-      "component": "svc-postgres"
-    },
-    "charts/svc-mongodb": {
-      "component": "svc-mongodb"
     }
   }
 }

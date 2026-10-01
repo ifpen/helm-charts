@@ -41,13 +41,6 @@ Renovate updates `FILESENDER_VERSION` with `feat(filesender)` and a
 description, and image tag aligned. PHP, SimpleSAMLphp, AWS SDK, PostgreSQL,
 and Docker changes use `fix(filesender)` where appropriate.
 
-## Fast-IT charts
-
-`webcomponent`, `webapp`, `svc-postgres`, and `svc-mongodb` remain `0.x`.
-Their Release PR is the stability decision. Dependencies are resolved from
-the published Helm repository (`>= 0.1.0-0`), while a release gate rejects a
-`webapp` lock file containing `-rc` or `-alpha`.
-
 ## Renovate and adding artifacts
 
 Renovate targets `main`. GitHub Action updates are `chore(ci)` and may

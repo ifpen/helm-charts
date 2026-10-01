@@ -51,8 +51,7 @@ jobs:
       - uses: azure/setup-helm@v5
       - name: Validate rendered manifests
         run: |
-          helm dependency build charts/webapp
-          for chart in charts/filesender charts/webcomponent charts/webapp; do
+          for chart in charts/filesender; do
             helm template "$chart" \
               --set ingress.enabled=false \
               --set postgresql.internal.enabled=false \
@@ -63,7 +62,7 @@ jobs:
 
   install:
     needs: paths
-    if: contains(needs.paths.outputs.charts, 'filesender') || contains(needs.paths.outputs.charts, 'webcomponent') || contains(needs.paths.outputs.charts, 'webapp')
+    if: contains(needs.paths.outputs.charts, 'filesender')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,15 +71,11 @@ jobs:
       - uses: helm/kind-action@v1.12.0
       - uses: azure/setup-helm@v5
       - uses: helm/chart-testing-action@v2.7.0
-      - name: Build dependencies
-        run: helm dependency build charts/webapp
       - name: Install supported charts with chart-testing
         run: |
           ct install --config ct.yaml \
-            --charts charts/filesender \
-            --charts charts/webcomponent \
-            --charts charts/webapp \
-            --helm-extra-args '--set ingress.enabled=false --set postgresql.internal.enabled=false --set postgres.enabled=false --set mongodb.enabled=false'
+          --charts charts/filesender \
+          --helm-extra-args '--set ingress.enabled=false --set postgresql.internal.enabled=false --set postgres.enabled=false --set mongodb.enabled=false'
 
   images:
     needs: paths
@@ -99,19 +94,3 @@ jobs:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.dockerfile }}
           push: false
-
-  release-gate:
-    if: "${{ startsWith(github.event.pull_request.title, 'chore(main): release webapp') }}"
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v5
-      - name: Resolve stable dependencies only
-        run: |
-          helm dependency build charts/webapp
-          if grep -Eiq -- '-(rc|alpha|beta)' charts/webapp/Chart.lock; then
-            echo "::error::webapp release depends on a prerelease chart"
-            exit 1
-          fi

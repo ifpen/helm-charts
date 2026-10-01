@@ -8,10 +8,6 @@ Collection de charts Helm pour Kubernetes, maintenus par [ifpen](https://github.
 | Chart | Version | Description |
 |-------|---------|-------------|
 | [filesender](charts/filesender/) | 3.10.0 | FileSender v3.10 - Application web open-source de partage de fichiers volumineux avec SimpleSAMLphp et Nginx intégrés |
-| [webcomponent](charts/webcomponent/) | 0.1.0 | Fast-IT WebComponents |
-| [webapp](charts/webapp/) | 0.1.0 | Fast-IT WebApps |
-| [svc-postgres](charts/svc-postgres/) | 0.1.0 | Fast-IT PostgreSQL service |
-| [svc-mongodb](charts/svc-mongodb/) | 0.1.0 | Fast-IT MongoDB service |
 <!-- CHART-TABLE-END -->
 
 Consultez le README de chaque chart pour la documentation complète et les options de configuration.
