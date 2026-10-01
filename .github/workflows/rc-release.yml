@@ -1,275 +1,186 @@
-name: RC Release on PR to main
+name: RC release
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
     types: [opened, synchronize, reopened]
+    paths:
+      - 'charts/**'
+      - 'docker/**'
+
+concurrency:
+  group: rc-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  rc-release:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: matrix
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only "$BASE_SHA...$HEAD_SHA" > /tmp/changed
+          matrix="$(jq -c --rawfile changed /tmp/changed '
+            ($changed | split("\n")) as $files |
+            [.[] |
+              .path as $path |
+              (.path_filter | sub("/\\*\\*$"; "")) as $prefix |
+              (any($files[]; startswith($prefix))) as $chart_changed |
+              (if .image then
+                $chart_changed or any($files[]; startswith("docker/" + .image + "/"))
+              else false end) as $image_changed |
+              select($chart_changed or $image_changed) |
+              {chart_name: .name, chart_path: .path, image_changed: $image_changed}
+            ]' .github/config/charts.json)"
+          echo "matrix=$(jq -cn --argjson include "$matrix" '{include: $include}')" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: detect
+    if: needs.detect.outputs.matrix != '{"include":[]}'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
       pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
     steps:
-      - name: Checkout PR branch
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-
-      - name: Lint Helm chart
-        run: helm lint charts/filesender
-
-      - name: Template Helm chart
-        run: helm template charts/filesender
-
-      - name: Determine RC version and detect Docker changes
-        id: rc-version
+      - uses: azure/setup-helm@v5
+      - name: Build RC package
+        id: package
+        env:
+          CHART_PATH: ${{ matrix.chart_path }}
+          CHART_NAME: ${{ matrix.chart_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          CHART_VERSION=$(grep '^version:' charts/filesender/Chart.yaml | awk '{print $2}')
-          echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
-
-          COMMITS_AHEAD=$(git rev-list --count origin/main..HEAD)
-
-          RC_VERSION="${CHART_VERSION}-rc.${COMMITS_AHEAD}"
-          echo "rc_version=${RC_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "📦 Version RC: ${RC_VERSION}"
-
-          # Detect if docker/filesender files changed compared to main
-          if git diff --name-only origin/main...HEAD -- docker/filesender/ | grep -q .; then
-            echo "docker_changed=true" >> "$GITHUB_OUTPUT"
-            echo "🐳 Changements Docker détectés"
-
-            # Extract Docker image metadata from Dockerfile
-            FS_VERSION=$(grep 'ARG FILESENDER_VERSION=' docker/filesender/Dockerfile | head -n 1 | cut -d'=' -f2 | tr -d '"' | tr -d ' ')
-            PHP_IMAGE=$(grep '^FROM php:' docker/filesender/Dockerfile | head -n 1 | awk '{print $2}')
-            PHP_VERSION=$(echo "$PHP_IMAGE" | cut -d':' -f2 | cut -d'-' -f1)
-
-            if [[ -z "$FS_VERSION" || -z "$PHP_VERSION" ]]; then
-              echo "::error::Impossible d'extraire les versions depuis le Dockerfile"
-              exit 1
-            fi
-
-            BASE_TAG="${FS_VERSION}-php${PHP_VERSION}"
-            RC_IMAGE_TAG="${BASE_TAG}-rc.${COMMITS_AHEAD}"
-            RC_IMAGE="ghcr.io/${{ github.repository_owner }}/filesender:${RC_IMAGE_TAG}"
-            echo "rc_image_tag=${RC_IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-            echo "rc_image=${RC_IMAGE}" >> "$GITHUB_OUTPUT"
-            echo "🐳 Image Docker RC: ${RC_IMAGE}"
-          else
-            echo "docker_changed=false" >> "$GITHUB_OUTPUT"
-            echo "rc_image_tag=" >> "$GITHUB_OUTPUT"
-            echo "rc_image=" >> "$GITHUB_OUTPUT"
-            echo "🐳 Pas de changements Docker"
+          version="$(awk '$1 == "version:" {print $2; exit}' "$CHART_PATH/Chart.yaml")"
+          rc_version="${version}-rc.${PR_NUMBER}.${RUN_ATTEMPT}"
+          work="/tmp/$CHART_NAME"
+          cp -a "$CHART_PATH" "$work"
+          sed -i "s/^version:.*/version: $rc_version/" "$work/Chart.yaml"
+          if [ "$CHART_NAME" = filesender ] && [ "${{ matrix.image_changed }}" = true ]; then
+            sed -i "0,/^  tag:.*/s//  tag: \"$rc_version\" # x-release-please-version/" "$work/values.yaml"
           fi
+          helm dependency build "$work"
+          mkdir -p /tmp/packages
+          helm package "$work" --destination /tmp/packages
+          echo "version=$rc_version" >> "$GITHUB_OUTPUT"
+          echo "package=/tmp/packages/$CHART_NAME-$rc_version.tgz" >> "$GITHUB_OUTPUT"
 
-      - name: Login to GitHub Container Registry
-        if: steps.rc-version.outputs.docker_changed == 'true'
-        uses: docker/login-action@v4
+      - uses: docker/login-action@v3
+        if: matrix.chart_name == 'filesender' && matrix.image_changed
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker RC image
-        if: steps.rc-version.outputs.docker_changed == 'true'
+      - name: Build and push FileSender RC image
+        if: matrix.chart_name == 'filesender' && matrix.image_changed
         uses: docker/build-push-action@v6
         with:
-          context: ./docker/filesender
+          context: docker/filesender
+          file: docker/filesender/Dockerfile
           push: true
-          tags: ${{ steps.rc-version.outputs.rc_image }}
+          tags: ghcr.io/${{ github.repository_owner }}/filesender:${{ steps.package.outputs.version }}
 
-      - name: Build RC Helm package
-        run: |
-          RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
-
-          cp -r charts/filesender /tmp/filesender-rc
-          sed -i "s/^version: .*/version: ${RC_VERSION}/" /tmp/filesender-rc/Chart.yaml
-
-          # If a Docker RC image was built, update values.yaml to use it
-          if [[ "${{ steps.rc-version.outputs.docker_changed }}" == "true" ]]; then
-            RC_IMAGE_TAG="${{ steps.rc-version.outputs.rc_image_tag }}"
-            # Replace the first occurrence of '  tag:' in values.yaml (image.tag)
-            sed -i '0,/^  tag: .*/{s/^  tag: .*/  tag: "'"${RC_IMAGE_TAG}"'"/}' /tmp/filesender-rc/values.yaml
-            echo "🐳 values.yaml mis à jour avec l'image RC: ${RC_IMAGE_TAG}"
-          fi
-
-          helm package /tmp/filesender-rc -d /tmp/helm-packages/
-          echo "📦 Package créé : filesender-${RC_VERSION}.tgz"
-
-      - name: Generate RC changelog
-        id: changelog
-        run: |
-          RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
-
-          # Find the previous RC tag for changelog comparison (exclude current RC version)
-          PREV_RC_TAG=$(git for-each-ref --sort=-creatordate --format='%(refname:short)' refs/tags \
-            | grep '^filesender-.*-rc\.' | grep -v "filesender-${RC_VERSION}$" | head -1)
-
-          if [ -n "$PREV_RC_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "${PREV_RC_TAG}..HEAD")
-            COMPARE_REF="$PREV_RC_TAG"
-          else
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "origin/main..HEAD")
-            COMPARE_REF="main"
-          fi
-
-          if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="- No changes"
-          fi
-
-          # Write notes to a temp file for multi-line support
-          NOTES_FILE=$(mktemp)
-          {
-            echo "## 📦 RC \`${RC_VERSION}\` from PR #${{ github.event.pull_request.number }}"
-            echo ""
-            echo "### Changes since \`${COMPARE_REF}\`"
-            echo ""
-            echo "$CHANGELOG"
-          } > "$NOTES_FILE"
-
-          echo "notes_file=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
-
-      - name: Create RC GitHub pre-release
+      - name: Publish GitHub prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.package.outputs.version }}
+          CHART_NAME: ${{ matrix.chart_name }}
+          PACKAGE: ${{ steps.package.outputs.package }}
         run: |
-          RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
-          TAG="filesender-${RC_VERSION}"
-          TGZ_FILE="/tmp/helm-packages/filesender-${RC_VERSION}.tgz"
+          tag="$CHART_NAME-$VERSION"
+          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" "$PACKAGE" --prerelease --title "$tag" --generate-notes
 
-          # Delete existing release with same tag if re-running
-          gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
-          git push --delete origin "${TAG}" 2>/dev/null || true
-          git tag -d "${TAG}" 2>/dev/null || true
-
-          # Create a tag at the PR head commit
-          git tag "${TAG}"
-          git push origin "${TAG}"
-
-          # Create pre-release with chart package as asset and changelog
-          gh release create "${TAG}" "${TGZ_FILE}" \
-            --prerelease \
-            --title "filesender-${RC_VERSION}" \
-            --notes-file "${{ steps.changelog.outputs.notes_file }}"
-
-      - name: Clean up old RC pre-releases (keep last 3)
+      - name: Update Helm index
         env:
+          VERSION: ${{ steps.package.outputs.version }}
+          CHART_NAME: ${{ matrix.chart_name }}
+          PACKAGE: ${{ steps.package.outputs.package }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # List all RC pre-releases sorted by creation date (newest first), skip the 3 most recent
-          gh release list --limit 100 --json tagName,isPrerelease,createdAt \
-            --jq '[.[] | select(.isPrerelease) | select(.tagName | test("-rc\\."))] | sort_by(.createdAt) | reverse | .[3:] | .[].tagName' \
-            | while read -r tag; do
-                echo "Deleting old RC release: ${tag}"
-                gh release delete "${tag}" --yes --cleanup-tag
-              done
+          git clone --depth 1 --branch gh-pages \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" /tmp/gh-pages
+          mkdir -p /tmp/index
+          cp "$PACKAGE" /tmp/index/
+          helm repo index /tmp/index \
+            --url "https://github.com/${{ github.repository }}/releases/download/${CHART_NAME}-${VERSION}" \
+            --merge /tmp/gh-pages/index.yaml
+          python3 -m pip install --quiet pyyaml
+          python3 - "$CHART_NAME" /tmp/index/index.yaml <<'PY'
+          import sys
+          import yaml
 
-      - name: Update Helm repo index on gh-pages
-        run: |
-          RC_VERSION="${{ steps.rc-version.outputs.rc_version }}"
-          TAG="filesender-${RC_VERSION}"
-
-          git clone --branch gh-pages --single-branch \
-            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
-            /tmp/gh-pages
-
-          # Generate index entry with release asset URL and merge with existing index
-          mkdir -p /tmp/rc-index
-          cp /tmp/helm-packages/filesender-${RC_VERSION}.tgz /tmp/rc-index/
-
+          chart = sys.argv[1]
+          path = sys.argv[2]
+          with open(path) as stream:
+              index = yaml.safe_load(stream) or {}
+          entries = index.get("entries", {}).get(chart, [])
+          stable = [entry for entry in entries if "-rc." not in str(entry.get("version", ""))]
+          rc = [entry for entry in entries if "-rc." in str(entry.get("version", ""))]
+          rc.sort(key=lambda entry: entry.get("created", ""), reverse=True)
+          index["entries"][chart] = stable + rc[:3]
+          with open(path, "w") as stream:
+              yaml.safe_dump(index, stream, sort_keys=False)
+          PY
+          cp /tmp/index/index.yaml /tmp/gh-pages/index.yaml
           cd /tmp/gh-pages
-          if [ -f index.yaml ]; then
-            helm repo index /tmp/rc-index \
-              --url "https://github.com/${{ github.repository }}/releases/download/${TAG}" \
-              --merge index.yaml
-          else
-            helm repo index /tmp/rc-index \
-              --url "https://github.com/${{ github.repository }}/releases/download/${TAG}"
-          fi
-          mv /tmp/rc-index/index.yaml index.yaml
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add index.yaml
-          git commit -m "chore: publish RC ${RC_VERSION} from PR #${{ github.event.pull_request.number }}"
+          git commit -m "chore: publish ${CHART_NAME} ${VERSION} RC" || true
           git push
 
-      - name: Comment PR with RC info
+      - name: Keep the three latest RCs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_NAME: ${{ matrix.chart_name }}
+        run: |
+          gh release list --limit 100 --json tagName,isPrerelease,createdAt \
+            --jq "[.[] | select(.isPrerelease) | select(.tagName | startswith(\"${CHART_NAME}-\"))] | sort_by(.createdAt) | reverse | .[3:] | .[].tagName" |
+            while read -r tag; do [ -z "$tag" ] || gh release delete "$tag" --yes --cleanup-tag; done
+
+      - name: Comment on PR
         uses: actions/github-script@v7
+        env:
+          VERSION: ${{ steps.package.outputs.version }}
+          CHART_NAME: ${{ matrix.chart_name }}
         with:
           script: |
-            const rcVersion = '${{ steps.rc-version.outputs.rc_version }}';
-            const chartVersion = '${{ steps.rc-version.outputs.chart_version }}';
-            const dockerChanged = '${{ steps.rc-version.outputs.docker_changed }}' === 'true';
-            const rcImage = '${{ steps.rc-version.outputs.rc_image }}';
-
-            let dockerSection = '';
-            if (dockerChanged) {
-              dockerSection = `
-            ### 🐳 Image Docker RC
-            | | |
-            |---|---|
-            | **Image RC** | \`${rcImage}\` |
-
-            \`\`\`bash
-            docker pull ${rcImage}
-            \`\`\`
-
-            `;
-            }
-
-            const body = `## 🏷️ Version RC publiée
-
-            | | |
-            |---|---|
-            | **Chart RC** | \`${rcVersion}\` |
-            | **Version finale prévue** | \`${chartVersion}\` |
-            | **FileSender** | \`${chartVersion.split('.').slice(0,2).join('.')}\` |
-            ${dockerChanged ? `| **Image Docker RC** | \`${rcImage}\` |` : ''}
-
-            ### Installation pour test
-            \`\`\`bash
-            helm repo update ifpen
-            helm install filesender-rc ifpen/filesender --version ${rcVersion}
-            \`\`\`
-            ${dockerSection}
-            ### Vérification
-            \`\`\`bash
-            helm search repo ifpen/filesender --versions --devel
-            \`\`\`
-
-            > ⚠️ Cette version RC sera remplacée par la version stable \`${chartVersion}\` lors du merge.
-            `;
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
+            const marker = `RC publiée — ${process.env.CHART_NAME}`;
+            const body = `## ${marker}\n\n` +
+              `Version : \`${process.env.VERSION}\`\n\n` +
+              '```bash\n' +
+              `helm repo update ifpen\nhelm install ${process.env.CHART_NAME}-rc ifpen/${process.env.CHART_NAME} ` +
+              `--version ${process.env.VERSION} --devel\n` +
+              '```';
+            const {data} = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number
             });
-
-            const botComment = comments.find(c =>
-              c.user.type === 'Bot' && c.body.includes('Version RC publiée')
-            );
-
-            if (botComment) {
+            const old = data.find(comment => comment.user.type === 'Bot' && comment.body.includes(marker));
+            if (old) {
               await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body,
+                owner: context.repo.owner, repo: context.repo.repo, comment_id: old.id, body
               });
             } else {
               await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body,
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body
               });
             }

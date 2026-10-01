@@ -1,167 +1,108 @@
-name: Release Charts
+name: Publish chart release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      chart_path:
+        required: true
+        type: string
+    secrets:
+      token:
+        required: true
 
 jobs:
-  release:
+  publish:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    runs-on: ubuntu-latest
+      packages: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Clean up RC pre-releases (keep last 3)
+      - uses: azure/setup-helm@v5
+      - name: Read chart metadata
+        id: metadata
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_PATH: ${{ inputs.chart_path }}
         run: |
-          # Delete old RC pre-releases, keeping the 3 most recent
-          gh release list --limit 100 --json tagName,isPrerelease,createdAt \
-            --jq '[.[] | select(.isPrerelease) | select(.tagName | test("-rc\\."))] | sort_by(.createdAt) | reverse | .[3:] | .[].tagName' \
-            | while read -r tag; do
-                echo "Deleting old RC release: ${tag}"
-                gh release delete "${tag}" --yes --cleanup-tag
-              done
-
-      - name: Clean up RC entries from Helm repo index
+          echo "chart_name=$(basename "$CHART_PATH")" >> "$GITHUB_OUTPUT"
+          echo "version=$(awk '$1 == "version:" {print $2; exit}' "$CHART_PATH/Chart.yaml")" >> "$GITHUB_OUTPUT"
+      - name: Build dependencies and package
+        env:
+          CHART_PATH: ${{ inputs.chart_path }}
         run: |
-          git clone --branch gh-pages --single-branch \
-            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
-            /tmp/gh-pages-cleanup
-
-          cd /tmp/gh-pages-cleanup
-
-          # Remove any leftover .tgz files and rc/ directory from gh-pages
-          CHANGED=false
-          if ls *.tgz 1>/dev/null 2>&1; then
-            git rm -f *.tgz
-            CHANGED=true
+          helm dependency build "$CHART_PATH"
+          if grep -Eiq -- '-(rc|alpha|beta)' "$CHART_PATH/Chart.lock" 2>/dev/null; then
+            echo "::error::Chart.lock contains a prerelease dependency"
+            exit 1
           fi
-          if [ -d rc ]; then
-            git rm -rf rc
-            CHANGED=true
-          fi
-
-          # Remove old RC entries from index.yaml (keep last 3 per chart)
-          if grep -q '\-rc\.' index.yaml 2>/dev/null; then
-            pip install pyyaml -q
-            python3 -c "
+          mkdir -p /tmp/packages
+          helm package "$CHART_PATH" --destination /tmp/packages
+      - name: Log in to GHCR
+        if: inputs.chart_path == 'charts/filesender'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.token }}
+      - name: Build and publish FileSender image
+        if: inputs.chart_path == 'charts/filesender'
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/filesender
+          file: docker/filesender/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/filesender:${{ steps.metadata.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/filesender:latest
+      - name: Attach package to release
+        env:
+          GH_TOKEN: ${{ secrets.token }}
+          CHART_NAME: ${{ steps.metadata.outputs.chart_name }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: gh release upload "$CHART_NAME-$VERSION" "/tmp/packages/$CHART_NAME-$VERSION.tgz" --clobber
+      - name: Publish Helm index
+        env:
+          GH_TOKEN: ${{ secrets.token }}
+          CHART_NAME: ${{ steps.metadata.outputs.chart_name }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          git clone --depth 1 --branch gh-pages \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" /tmp/gh-pages
+          mkdir -p /tmp/index
+          cp "/tmp/packages/$CHART_NAME-$VERSION.tgz" /tmp/index/
+          helm repo index /tmp/index \
+            --url "https://github.com/${{ github.repository }}/releases/download/$CHART_NAME-$VERSION" \
+            --merge /tmp/gh-pages/index.yaml
+          python3 -m pip install --quiet pyyaml
+          python3 - "$CHART_NAME" /tmp/index/index.yaml <<'PY'
+          import sys
           import yaml
-          with open('index.yaml') as f:
-              index = yaml.safe_load(f)
-          for name in list(index.get('entries', {}).keys()):
-              stable = [e for e in index['entries'][name] if '-rc.' not in str(e.get('version', ''))]
-              rc = [e for e in index['entries'][name] if '-rc.' in str(e.get('version', ''))]
-              rc.sort(key=lambda e: e.get('created', ''), reverse=True)
-              index['entries'][name] = stable + rc[:3]
-          with open('index.yaml', 'w') as f:
-              yaml.dump(index, f, default_flow_style=False, sort_keys=False)
-          "
-            git add index.yaml
-            CHANGED=true
-          fi
 
-          if [ "$CHANGED" = true ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "chore: clean up RC artifacts before stable release"
-            git push
-            echo "🧹 RC artifacts cleaned up"
-          else
-            echo "🧹 No RC artifacts to clean up"
-          fi
-
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
+          chart = sys.argv[1]
+          path = sys.argv[2]
+          with open(path) as stream:
+              index = yaml.safe_load(stream) or {}
+          entries = index.get("entries", {}).get(chart, [])
+          index["entries"][chart] = [
+              entry for entry in entries if "-rc." not in str(entry.get("version", ""))
+          ]
+          with open(path, "w") as stream:
+              yaml.safe_dump(index, stream, sort_keys=False)
+          PY
+          cp /tmp/index/index.yaml /tmp/gh-pages/index.yaml
+          cd /tmp/gh-pages
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.yaml
+          git commit -m "chore: publish $CHART_NAME $VERSION" || true
+          git push
+      - name: Purge prereleases for this chart
         env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-
-      - name: Update README chart table
+          GH_TOKEN: ${{ secrets.token }}
+          CHART_NAME: ${{ steps.metadata.outputs.chart_name }}
         run: |
-          # Build the new table from Chart.yaml files
-          table="| Chart | Version | Description |\n|-------|---------|-------------|"
-          for chart_dir in $(ls -d charts/*/); do
-            chart_yaml="${chart_dir}Chart.yaml"
-            if [ -f "$chart_yaml" ]; then
-              name=$(grep '^name:' "$chart_yaml" | head -1 | sed 's/^name: *//')
-              version=$(grep '^version:' "$chart_yaml" | head -1 | sed 's/^version: *//')
-              description=$(grep '^description:' "$chart_yaml" | head -1 | sed 's/^description: *//')
-              table="${table}\n| [${name}](${chart_dir}) | ${version} | ${description} |"
-            fi
-          done
-
-          # Replace table between markers in README.md
-          awk -v table="$table" '
-            /<!-- CHART-TABLE-START -->/ { print; printf "%s\n", table; skip=1; next }
-            /<!-- CHART-TABLE-END -->/ { skip=0 }
-            !skip { print }
-          ' README.md > README.tmp && mv README.tmp README.md
-
-          # Commit only if there are changes
-          if ! git diff --quiet README.md; then
-            git add README.md
-            git commit -m "docs: mise à jour automatique du tableau de charts dans le README"
-            git push
-          fi
-
-      - name: Update release changelogs
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          now=$(date +%s)
-          cutoff=$((now - 600))
-
-          while read -r tag tag_date; do
-            if [ "$tag_date" -lt "$cutoff" ]; then
-              break
-            fi
-
-            # Extract chart name (strip trailing version like -3.5.1)
-            chart_name=$(echo "$tag" | sed 's/-[0-9][0-9.]*$//')
-
-            if [ "$chart_name" = "$tag" ]; then
-              echo "Could not determine chart name from tag $tag, skipping"
-              continue
-            fi
-
-            # Find the most recent previous tag for the same chart
-            prev_tag=$(git for-each-ref --sort=creatordate --format='%(refname:short)' refs/tags \
-              | grep "^${chart_name}-[0-9]" | grep -v "^${tag}$" | tail -1)
-
-            if [ -z "$prev_tag" ]; then
-              echo "No previous tag found for $tag (first release), skipping changelog"
-              continue
-            fi
-
-            # Generate changelog filtered to the chart directory
-            changelog=$(git log --pretty=format:"- %s (%h)" "${prev_tag}..${tag}" -- "charts/${chart_name}/")
-
-            if [ -z "$changelog" ]; then
-              echo "No changes found between $prev_tag and $tag, skipping"
-              continue
-            fi
-
-            # Get existing release description
-            existing_body=$(gh release view "$tag" --json body -q '.body' 2>/dev/null || echo "")
-
-            # Write the new body to a temp file to safely handle special characters
-            tmpfile=$(mktemp)
-            if [ -n "$existing_body" ]; then
-              printf '%s\n\n' "$existing_body" >> "$tmpfile"
-            fi
-            printf '## Changements depuis %s\n\n%s\n' "$prev_tag" "$changelog" >> "$tmpfile"
-
-            gh release edit "$tag" --notes-file "$tmpfile"
-            rm -f "$tmpfile"
-            echo "Updated changelog for $tag (since $prev_tag)"
-          done < <(git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:unix)' refs/tags)
+          gh release list --limit 100 --json tagName,isPrerelease \
+            --jq "[.[] | select(.isPrerelease) | select(.tagName | startswith(\"${CHART_NAME}-\"))] | .[].tagName" |
+            while read -r tag; do [ -z "$tag" ] || gh release delete "$tag" --yes --cleanup-tag; done

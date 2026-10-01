@@ -1,73 +1,96 @@
-name: PR Validation
+name: PR validation
 
 on:
   pull_request:
-    branches:
-      - develop
-      - main
+    branches: [main]
     paths:
       - 'charts/**'
       - 'docker/**'
+      - '.github/config/**'
+      - '.github/workflows/pr-validation.yml'
 
 jobs:
-  changes:
+  paths:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
-      charts: ${{ steps.filter.outputs.charts }}
-      docker: ${{ steps.filter.outputs.docker }}
+      charts: ${{ steps.matrix.outputs.charts }}
+      images: ${{ steps.matrix.outputs.images }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Detect changed paths
-        id: filter
-        uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v4
         with:
-          filters: |
-            charts:
-              - 'charts/**'
-            docker:
-              - 'docker/**'
+          fetch-depth: 0
+      - id: matrix
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          charts="$(jq -c --arg changed "$changed" '
+            ($changed | split("\n")) as $files |
+            [.[] | .path as $path | select(any($files[]; startswith($path + "/")))]
+            | map({name, path})' .github/config/charts.json)"
+          images="$(jq -c --arg changed "$changed" '
+            ($changed | split("\n")) as $files |
+            [.[] | .context as $context | select(any($files[]; startswith($context + "/")))]
+            | map({name, context, dockerfile})' .github/config/images.json)"
+          echo "charts=$charts" >> "$GITHUB_OUTPUT"
+          echo "images=$images" >> "$GITHUB_OUTPUT"
 
-  lint-chart:
-    needs: changes
-    if: needs.changes.outputs.charts == 'true'
+  lint:
+    needs: paths
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+      - uses: helm/chart-testing-action@v2.7.0
+      - name: Lint changed charts
+        run: ct lint --config ct.yaml --check-version-increment=false
+      - uses: azure/setup-helm@v5
+      - name: Validate rendered manifests
+        run: |
+          for chart in charts/filesender; do
+            helm template "$chart" \
+              --set ingress.enabled=false \
+              --set postgresql.internal.enabled=false \
+              --set postgres.enabled=false \
+              --set mongodb.enabled=false |
+              docker run --rm -i ghcr.io/yannh/kubeconform:latest -strict -summary
+          done
 
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-
-      - name: Lint Helm chart
-        run: helm lint charts/filesender
-
-      - name: Template Helm chart
-        run: helm template charts/filesender
-
-  build-docker:
-    needs: changes
-    if: needs.changes.outputs.docker == 'true'
+  install:
+    needs: paths
+    if: contains(needs.paths.outputs.charts, 'filesender')
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1.12.0
+      - uses: azure/setup-helm@v5
+      - uses: helm/chart-testing-action@v2.7.0
+      - name: Install supported charts with chart-testing
+        run: |
+          ct install --config ct.yaml \
+          --charts charts/filesender \
+          --helm-extra-args '--set ingress.enabled=false --set postgresql.internal.enabled=false --set postgres.enabled=false --set mongodb.enabled=false'
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image (no push)
-        uses: docker/build-push-action@v6
+  images:
+    needs: paths
+    if: needs.paths.outputs.images != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        image: ${{ fromJSON(needs.paths.outputs.images) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
         with:
-          context: ./docker/filesender
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
           push: false
-          tags: ghcr.io/${{ github.repository_owner }}/filesender:pr-${{ github.event.pull_request.number }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/filesender:buildcache
