@@ -116,6 +116,19 @@ jobs:
           CHART_VERSION="$(grep '^version:' "${{ matrix.chart_path }}/Chart.yaml" | awk '{print $2}')"
           MAJOR_MINOR="$(echo "${CHART_VERSION}" | cut -d'.' -f1-2)"
 
+          # Sur develop, Chart.yaml n'est pas resynchronisé avec le Dockerfile :
+          # pour un chart lié à une image, x.y suit la version applicative du Dockerfile.
+          LINKED_IMAGE="${{ matrix.linked_image }}"
+          if [[ -n "$LINKED_IMAGE" ]]; then
+            DOCKERFILE="$(jq -r --arg n "$LINKED_IMAGE" '.[] | select(.name==$n) | .dockerfile' .github/config/images.json)"
+            VERSION_SCRIPT="$(jq -r --arg n "$LINKED_IMAGE" '.[] | select(.name==$n) | .version_script' .github/config/images.json)"
+            APP_VERSION="$(bash "${VERSION_SCRIPT}" "${DOCKERFILE}" 2>/dev/null | sed -n 's/^app_version=//p')"
+            if [[ -n "$APP_VERSION" ]]; then
+              MAJOR_MINOR="$APP_VERSION"
+              echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
           # Trouver le dernier tag stable correspondant à MAJOR.MINOR (sans rc)
           LATEST_STABLE="$(git tag -l "${CHART_NAME}-${MAJOR_MINOR}.*" \
             | grep -v '\-rc\.' | sort -V | tail -1)"
@@ -206,6 +219,12 @@ jobs:
           mkdir -p /tmp/helm-packages
           cp -r "${{ matrix.chart_path }}" "/tmp/${CHART_NAME}-rc"
           sed -i "s/^version: .*/version: ${RC_VERSION}/" "/tmp/${CHART_NAME}-rc/Chart.yaml"
+
+          APP_VERSION="${{ steps.rc-version.outputs.app_version }}"
+          if [[ -n "$APP_VERSION" ]]; then
+            sed -i "s/^appVersion: .*/appVersion: \"${APP_VERSION}\"/" "/tmp/${CHART_NAME}-rc/Chart.yaml"
+            sed -i "s/FileSender v[0-9][0-9]*\.[0-9][0-9]*/FileSender v${APP_VERSION}/" "/tmp/${CHART_NAME}-rc/Chart.yaml"
+          fi
 
           # Si une image Docker RC a été construite, mettre à jour son tag dans values.yaml
           if [[ "${{ matrix.image_changed }}" == "true" && -n "${{ steps.rc-image.outputs.rc_image_tag }}" ]]; then
