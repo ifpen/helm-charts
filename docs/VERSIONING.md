@@ -144,3 +144,11 @@ Pour ajouter un nouveau chart ou une nouvelle image : ajouter une entrée dans l
 registre correspondant. Les workflows `docker-build.yml`, `chart-bump.yml`,
 `pr-validation.yml` et `rc-release.yml` s'adaptent automatiquement via des matrices
 dynamiques générées depuis ces JSON.
+
+---
+
+## Reprise manuelle d'une release
+
+Les commits auto `[skip ci]` poussés sur `main` après le merge (ex. `chore: update filesender to image x.y.z`)
+ne déclenchent pas `release.yml`. Si la release du chart n'a pas été publiée, la relancer via
+*Actions → Release Charts → Run workflow* (branche `main`).
