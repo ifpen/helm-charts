@@ -6,6 +6,11 @@ metadata:
     {{- include "filesender.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  {{- if and .Values.persistence.enabled (ne .Values.filesender.storage.type "CloudS3") (eq .Values.persistence.accessMode "ReadWriteOnce") }}
+  # Volume RWO : l'ancien pod doit libérer le PVC avant le démarrage du nouveau
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "filesender.selectorLabels" . | nindent 6 }}

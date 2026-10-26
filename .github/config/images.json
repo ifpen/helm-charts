@@ -1,0 +1,10 @@
+[
+  {
+    "name": "filesender",
+    "context": "docker/filesender",
+    "dockerfile": "docker/filesender/Dockerfile",
+    "path_filter": "docker/filesender/**",
+    "registry": "ghcr.io",
+    "version_script": ".github/scripts/version-filesender.sh"
+  }
+]

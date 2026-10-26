@@ -8,6 +8,9 @@ metadata:
     app.kubernetes.io/component: database
 spec:
   replicas: 1
+  # Volume RWO : l'ancien pod doit libérer le PVC avant le démarrage du nouveau
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "filesender.selectorLabels" . | nindent 6 }}

@@ -1,10 +1,16 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:base"
+    "config:recommended"
   ],
   "baseBranches": ["develop"],
   "packageRules": [
+    {
+      "description": "Suivre à la fois la version PHP et la version Alpine dans le tag de l'image de base",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["php"],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-fpm-alpine(?<compatibility>\\d+\\.\\d+)$"
+    },
     {
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["filesender/filesender"],

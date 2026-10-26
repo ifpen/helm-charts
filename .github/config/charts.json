@@ -1,0 +1,8 @@
+[
+  {
+    "name": "filesender",
+    "path": "charts/filesender",
+    "image": "filesender",
+    "path_filter": "charts/filesender/**"
+  }
+]
