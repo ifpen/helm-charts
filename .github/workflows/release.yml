@@ -1,15 +1,61 @@
 name: Release Charts
 
+# Déclenché APRÈS les workflows qui committent le bump de version sur main
+# (docker-build / chart-bump), car ces commits [skip ci] ne déclenchent pas de push event
+# et la release doit publier le chart bumpé, pas celui du commit de merge.
+
 on:
   workflow_dispatch:
-  push:
+  workflow_run:
+    workflows:
+      - "Build Docker Images and Update Charts"
+      - "Bump Chart Version on Packaging Changes"
+    types: [completed]
     branches:
       - main
-    paths-ignore:
-      - '.github/**'
+
+concurrency:
+  group: release-charts
+  cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Decide whether to release
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          TRIGGER: ${{ github.event.workflow_run.name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          RUN=true
+          if [[ "$EVENT" == "workflow_run" ]]; then
+            if [[ "$CONCLUSION" != "success" ]]; then
+              RUN=false
+            elif [[ "$TRIGGER" == "Bump Chart Version on Packaging Changes" ]] \
+              && git diff --name-only "${HEAD_SHA}~1" "${HEAD_SHA}" | grep -q '^docker/'; then
+              # Changement Docker : le bump est fait par docker-build, qui déclenchera la release
+              RUN=false
+            fi
+          fi
+          echo "run=${RUN}" >> "$GITHUB_OUTPUT"
+          echo "Release : ${RUN}"
+
   release:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -17,6 +63,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Configure Git
@@ -78,6 +125,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git commit -m "chore: clean up RC artifacts before stable release"
+            git pull --rebase -q
             git push
             echo "🧹 RC artifacts cleaned up"
           else
@@ -114,7 +162,8 @@ jobs:
           if ! git diff --quiet README.md; then
             git add README.md
             git commit -m "docs: mise à jour automatique du tableau de charts dans le README"
-            git push
+            git pull --rebase -q origin main
+            git push origin HEAD:main
           fi
 
       - name: Update release changelogs
